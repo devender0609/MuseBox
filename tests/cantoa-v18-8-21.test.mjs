@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const page = fs.readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
+const css = fs.readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+test('version comparison is contextual inside Revision Studio',()=>{ assert.match(page,/Compare versions/); assert.match(page,/versionFamily\.length > 1/); });
+test('comparison switches playback from the same position',()=>{ assert.match(page,/const resumeAt = compareAudio\.current\?\.currentTime \|\| comparePosition/); assert.match(page,/audio\.currentTime = Math\.min\(resumeAt/); });
+test('comparison itself has no generation call',()=>{ const part=page.slice(page.indexOf('const playComparedVersion'),page.indexOf('const openSaved')); assert.doesNotMatch(part,/\/api\/music/); });
+test('preferred version can be kept without generation',()=>{ assert.match(page,/Keep this one/); assert.match(page,/cantoa-preferred-version:/); });
+test('only three compact linked versions are rendered',()=>{ assert.match(page,/return \[originals\[0\], \.\.\.revisions\.slice\(-2\)\]/); });
+test('comparison is responsive in light and dark themes',()=>{ assert.match(css,/\.theme-dark \.version-compare/); assert.match(css,/@media\(max-width:760px\).*\.version-compare-grid/s); });

@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const page=fs.readFileSync('app/page.tsx','utf8');
+const css=fs.readFileSync('app/globals.css','utf8');
+const gift=fs.readFileSync('app/share/[token]/gift-client.tsx','utf8');
+test('dark Speak your idea CTA is explicitly strengthened',()=>{assert.match(css,/theme-dark \.idea-box \.voice-idea/);assert.match(css,/linear-gradient/)});
+test('all Cantoa video exports are branded',()=>{assert.match(page,/const showExportBranding = true/);assert.match(page,/Made with Cantoa/)});
+test('reaction capture records branded canvas video',()=>{assert.match(gift,/canvas\.captureStream\(30\)/);assert.match(gift,/ctx\.fillText\("Cantoa"/)});
+test('source launcher removes duplicate text voice memo and existing audio cards',()=>{assert.doesNotMatch(page,/<b>Text or message<\/b>/);assert.doesNotMatch(page,/<b>Voice memo<\/b>/);assert.doesNotMatch(page,/<b>Existing audio<\/b>/)});

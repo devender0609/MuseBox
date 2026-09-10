@@ -1,0 +1,13 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+const page=readFileSync(new URL("../app/page.tsx",import.meta.url),"utf8");
+const css=readFileSync(new URL("../app/globals.css",import.meta.url),"utf8");
+const usage=readFileSync(new URL("../lib/usage.ts",import.meta.url),"utf8");
+const plan=readFileSync(new URL("../app/api/music/plan/route.ts",import.meta.url),"utf8");
+const transcribe=readFileSync(new URL("../app/api/transcribe/route.ts",import.meta.url),"utf8");
+const sql=readFileSync(new URL("../supabase-setup.sql",import.meta.url),"utf8");
+test("v17.2 preserves the preferred v17 layout, removes Guided Create, and keeps the light-mode spacing fix",()=>{assert.match(page,/moment-launcher/);assert.doesNotMatch(page,/Guided Create/);assert.doesNotMatch(page,/Tell Cantoa the human part/);assert.match(page,/>Create<\/button>/);assert.match(page,/>Advanced<\/button>/);assert.match(css,/html\[data-theme="light"\] \.create-view \{ padding-top: 34px; \}/);assert.doesNotMatch(css,/v18 —/)});
+test("generation requires authenticated server-side entitlement",()=>{assert.match(page,/if \(!session\)/);assert.match(usage,/throw new Error\("SIGN_IN_REQUIRED"\)/);assert.match(usage,/if \(!process\.env\.NEXT_PUBLIC_SUPABASE_URL\) throw new Error\("USAGE_NOT_CONFIGURED"\)/)});
+test("Explore is exactly two free music creations and fails closed",()=>{assert.match(sql,/free_songs_remaining integer not null default 2/);assert.match(sql,/if coalesce\(free_remaining,0\) <= 0 then raise exception 'FREE_SONGS_USED'/);assert.match(sql,/if p_minutes>2 then raise exception 'FREE_SONG_TOO_LONG'/);assert.match(sql,/free_songs_remaining=greatest\(0,free_songs_remaining-1\)/);assert.match(page,/2 free music creations/)});
+test("provider-backed planning and transcription are protected too",()=>{assert.match(plan,/ensureGenerationAccess\(request, duration \/ 60\)/);assert.match(transcribe,/ensureGenerationAccess\(request,0\)/)});

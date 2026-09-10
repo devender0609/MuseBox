@@ -1,0 +1,13 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const page=fs.readFileSync(new URL('../app/page.tsx',import.meta.url),'utf8');
+const route=fs.readFileSync(new URL('../app/api/my-voice/route.ts',import.meta.url),'utf8');
+const css=fs.readFileSync(new URL('../app/globals.css',import.meta.url),'utf8');
+test('recommends short voice sample',()=>{assert.ok(page.includes('30–45 seconds'));assert.equal(page.includes('Use about 1–2 minutes'),false)});
+test('shows live recording duration',()=>{assert.ok(page.includes('myVoiceRecordSeconds'));assert.ok(page.includes('Stop · ${myVoiceRecordSeconds}s'))});
+test('auto stops at 60 seconds',()=>{assert.ok(page.includes('seconds >= 60'));});
+test('includes a sample reading script',()=>{assert.ok(page.includes('Need something to read?'));assert.ok(page.includes('Today I’m recording a short voice sample for Cantoa'))});
+test('provider 422 copy no longer demands 1-2 minutes',()=>{assert.ok(route.includes('30–45 seconds of clear speech'));assert.equal(route.includes('Try 1–2 minutes'),false)});
+test('provider errors have clearer categories',()=>{assert.ok(route.includes('temporarily rate-limited'));assert.ok(route.includes('temporarily unavailable'))});
+test('guide styling exists',()=>{assert.ok(css.includes('.my-voice-guide'))});

@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const page = fs.readFileSync(new URL('../app/page.tsx', import.meta.url), 'utf8');
+const css = fs.readFileSync(new URL('../app/globals.css', import.meta.url), 'utf8');
+test('removes Why this works user-facing section', () => { assert.equal(page.includes('<summary>Why this works</summary>'), false); });
+test('offers spoken intro outro and message-only modes', () => { for (const text of ['Spoken intro','Spoken outro','Voice message only']) assert.ok(page.includes(text)); });
+test('can create downloadable song plus spoken voice', () => { assert.ok(page.includes('createSongWithMyVoice')); assert.ok(page.includes('OfflineAudioContext')); assert.ok(page.includes('Create song + ${myVoiceUse}')); });
+test('keeps original song unchanged', () => { assert.ok(page.includes('Your original song remains unchanged.')); });
+test('voice message field is explicit', () => { assert.ok(page.includes('Your spoken message')); assert.ok(page.includes('Happy birthday, Mom. This song is for you.')); });
+test('new My Voice workflow has responsive styles', () => { assert.ok(css.includes('.my-voice-purpose')); assert.ok(css.includes('.my-voice-actions')); });

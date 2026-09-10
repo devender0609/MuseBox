@@ -1,0 +1,13 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+const page=fs.readFileSync(new URL("../app/page.tsx",import.meta.url),"utf8");
+const contribution=fs.readFileSync(new URL("../app/contribute/[token]/contribution-client.tsx",import.meta.url),"utf8");
+const api=fs.readFileSync(new URL("../app/api/contribute/[token]/route.ts",import.meta.url),"utf8");
+const vote=fs.readFileSync(new URL("../app/api/contribute/[token]/vote/route.ts",import.meta.url),"utf8");
+const sql=fs.readFileSync(new URL("../supabase-setup.sql",import.meta.url),"utf8");
+test("Group Song 2.0 is visible without adding navigation clutter",()=>{assert.match(page,/Group Song 2\.0/);assert.match(page,/Build from group ideas/)});
+test("contributors can submit structured memories messages ideas feelings and a photo",()=>{for(const term of ["Memory","Message","Song idea","Feeling to leave behind","Photo \\(optional\\)"]) assert.match(contribution,new RegExp(term));assert.match(api,/5 \* 1024 \* 1024/)});
+test("private group page can show and vote on shared ideas",()=>{assert.match(contribution,/Shared ideas/);assert.match(contribution,/group-vote/);assert.match(vote,/moment_contribution_votes/)});
+test("owner brief respects group votes without silencing quieter voices",()=>{assert.match(page,/higher-voted ideas as stronger group signals without ignoring quieter voices/);assert.match(page,/Group votes:/)});
+test("database migration adds structured fields and unique per-browser votes",()=>{assert.match(sql,/v18\.8\.29_group_song_2/);assert.match(sql,/add column if not exists kind/);assert.match(sql,/unique\(contribution_id,voter_token\)/)});

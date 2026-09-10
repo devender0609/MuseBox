@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+const page=fs.readFileSync('app/page.tsx','utf8');
+const css=fs.readFileSync('app/globals.css','utf8');
+test('real-to-music uses one exclusive active panel',()=>{assert.match(page,/activeSourcePanel/);assert.match(page,/selectSourcePanel\("story"\)/);assert.match(page,/selectSourcePanel\("website"\)/);assert.match(page,/activeSourcePanel === "photo"/);assert.match(page,/activeSourcePanel === "video"/)});
+test('unclickable composer explainer removed',()=>{assert.doesNotMatch(page,/Already in the composer/)});
+test('story input is short and not survey-like',()=>{assert.match(page,/Tell Cantoa one good thing/);assert.match(page,/No survey\. A sentence or two is enough/);assert.match(page,/What happened or what matters\?/);assert.doesNotMatch(page,/What is the occasion or relationship\?/);assert.doesNotMatch(page,/What do you want them to know\?/)});
+test('website source field does not duplicate while website panel is open',()=>{assert.match(page,/sourceKind === "link" && activeSourcePanel !== "website"/)});
+test('selected source gets visible active styling in light and dark modes',()=>{assert.match(css,/\.cantoa-source-grid>button\.active/);assert.match(css,/data-theme="dark"\] \.cantoa-source-grid>button\.active/)});
