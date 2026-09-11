@@ -72,11 +72,12 @@ export async function POST(request: NextRequest) {
   }
   const mode = String(form.get("mode") || "vocals");
   if (!(["vocals", "instrumental"] as string[]).includes(mode)) return NextResponse.json({ error: "Invalid song mode." }, { status: 400 });
-  const duration = Math.min(600, Math.max(1, Number(form.get("duration")) || 30));
+  const duration = Math.min(300, Math.max(1, Number(form.get("duration")) || 30));
   const storageKey = `${user.id}/${id}.mp3`;
+  const contentType = file.type === "audio/wav" ? "audio/wav" : file.type === "audio/mp4" ? "audio/mp4" : "audio/mpeg";
   const { error: uploadError } = await admin.storage
     .from("songs")
-    .upload(storageKey, file, { contentType: "audio/mpeg", upsert: true });
+    .upload(storageKey, file, { contentType, upsert: true });
   if (uploadError)
     return NextResponse.json({ error: uploadError.message }, { status: 500 });
   const lyrics = String(form.get("lyrics") || "").trim();

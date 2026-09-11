@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     requestSummary = prompt;
     if (prompt.length < 8 || prompt.length > 4000)
       return NextResponse.json({ error: "Describe the song in at least 8 characters." }, { status: 400 });
-    const duration = Math.min(600, Math.max(10, Number(body.duration) || 30));
+    const duration = Math.min(300, Math.max(10, Number(body.duration) || 30));
     requestedSeconds = duration;
     charged = duration / 60;
     try {

@@ -47,15 +47,15 @@ This release removes the remaining visible Source chooser, tightens first-run sp
 - Dry routing diagnostics verify expected provider selection without calling a provider or consuming membership minutes.
 - Generation observability records compact operational metadata only; lyrics are not logged and prompt previews are capped at 160 characters.
 - Cost guardrails preserve one-provider-at-a-time routing, Mureka `n=1`, failed-generation minute restoration, cost-aware Stability routing and free re-exports from existing audio.
-- Creator remains 50 music-generation minutes/month; Studio remains 150 minutes/month.
+- Creator includes 40 music-generation minutes/month; Studio includes 120 minutes/month.
 - Requires the new rerunnable v18.5 `generation_events` section in `supabase-setup.sql` for the owner dashboard. The customer app continues to generate even if observability storage is temporarily unavailable.
 
 # Cantoa Studio v18.3.7
 
 ## v18.3.7 membership + Create clarity
 
-- Creator: 50 minutes/month of new AI-generated music.
-- Studio: 150 minutes/month of new AI-generated music.
+- Creator: 40 minutes/month of new AI-generated music.
+- Studio: 120 minutes/month of new AI-generated music.
 - Re-exporting an existing song as Reel, square video, lyric video, gift page or download does not consume music-generation minutes.
 - Simple Create now includes optional Song title and Style fields; Advanced keeps the full controls and My Sound.
 - Language guidance explicitly names many popular languages while preserving free-text support for any language, dialect, regional variant or mix.
@@ -286,7 +286,7 @@ Run `supabase-setup.sql` if the v17.1+ free-song entitlement migration has not a
 
 - Removed the old migration rule that treated `minutes_remaining < 2` as proof the first free song had been used.
 - Added a one-time, idempotent repair tracked in `cantoa_schema_migrations`.
-- During this transition, an active Explore account with at least one cloud-saved song is treated as claimed; one without a cloud-saved song is restored to one free song (2-minute maximum).
+- During this transition, an active Explore account with at least one cloud-saved song is treated as claimed; one without a cloud-saved song is restored to the two-free-song entitlement (2-minute maximum each), subject to the recorded launch/migration history.
 - The customer-facing Explore copy now says `1 complete song free` and explicitly includes MP3 download and sharing.
 
 

@@ -749,6 +749,14 @@ function pcmWav(buffer: AudioBuffer) {
   return new Blob([bytes], { type: "audio/wav" });
 }
 
+
+function audioFileInfo(blob: Blob) {
+  const type = (blob.type || "").toLowerCase();
+  if (type.includes("wav")) return { extension: "wav", type: "audio/wav" };
+  if (type.includes("mp4") || type.includes("m4a") || type.includes("aac")) return { extension: "m4a", type: "audio/mp4" };
+  return { extension: "mp3", type: "audio/mpeg" };
+}
+
 async function blobToDataUrl(blob: Blob) {
   return await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -1695,9 +1703,8 @@ export default function Home() {
   };
 
   const selectSourcePanel = (panel: SourcePanel) => {
-    // One source tool at a time. Selecting the active tool closes it; selecting another
-    // replaces it. Source-specific guidance stays inside the selected panel and never
-    // leaks into the main composer status area.
+    // One primary source at a time. Switching source tools clears hidden source state so
+    // an old audio/text/video attachment can never silently override the newly selected tool.
     setMessage("");
     if (activeSourcePanel === panel) {
       clearSourcePanelState(panel);
@@ -1705,15 +1712,17 @@ export default function Home() {
       return;
     }
     clearSourcePanelState(activeSourcePanel);
+    setSourceFile(null);
+    setSourceMode(false);
+    setSourceText("");
+    setMemoryPhotos([]);
+    setVisualScoreFile(null);
+    setVideoSourceFile(null);
+    setSourceUrl("");
+    setSourceKind(panel === "website" ? "link" : "idea");
     setActiveSourcePanel(panel);
     if (panel === "website") {
-      setVisualScoreFile(null); setVideoSourceFile(null);
-      setSourceKind("link"); setSourceMode(false);
       requestAnimationFrame(() => document.getElementById("cantoa-source-url-panel")?.focus());
-    } else {
-      if (sourceKind === "link") { setSourceKind("idea"); setSourceUrl(""); }
-      if (panel !== "photo") setVisualScoreFile(null);
-      if (panel !== "video") setVideoSourceFile(null);
     }
   };
 
@@ -1733,6 +1742,7 @@ export default function Home() {
       setSourceKind("link");
       setSourceMode(false);
       setSourceUrl(trimmed);
+      setPrompt("Create an original song inspired by this webpage.");
       setMessage(
         "Webpage detected automatically. Cantoa will read it when you create the song.",
       );
@@ -1853,9 +1863,10 @@ export default function Home() {
       setCloudSaveFailed(false);
       setCloudStatus("Saving securely…");
       const form = new FormData();
+      const audioInfo = audioFileInfo(blob);
       form.append(
         "file",
-        new File([blob], `${saved.id}.mp3`, { type: "audio/mpeg" }),
+        new File([blob], `${saved.id}.${audioInfo.extension}`, { type: audioInfo.type }),
       );
       form.append("id", saved.id);
       form.append("title", saved.title);
@@ -1887,7 +1898,10 @@ export default function Home() {
   };
 
   const resolveGenerationPrompt = async (base: string) => {
-    let generationPrompt = base;
+    let generationPrompt = base.trim();
+    if (sourceKind === "link" && (!generationPrompt || /^https:\/\/\S+$/i.test(generationPrompt))) {
+      generationPrompt = "Create an original song inspired by this webpage. Let the page's subject, mood and purpose guide the lyrics and production.";
+    }
     if (sourceKind === "text" && sourceText.trim() && !looksLikeCreationInstruction(sourceText))
       generationPrompt += `\n\nSource material to transform into an original song:\n${sourceText.slice(0, 12000)}`;
     if (sourceKind === "link" && sourceUrl.trim()) {
@@ -2034,8 +2048,14 @@ export default function Home() {
   };
 
   const generateSong = async (override?: string) => {
-    if (prompt.trim().length < 8) {
-      setMessage("Describe the song in a little more detail.");
+    const hasSourceInput = Boolean(
+      (sourceKind === "link" && sourceUrl.trim()) ||
+      (sourceMode && sourceFile) ||
+      visualScoreFile ||
+      videoSourceFile
+    );
+    if (prompt.trim().length < 8 && !hasSourceInput) {
+      setMessage("Describe the song in a little more detail, or choose something real to turn into music.");
       return;
     }
     if (!session) {
@@ -2238,7 +2258,8 @@ export default function Home() {
     setAccountOpen(false);
     setMembershipOpen(false);
     setMessage("");
-    downloadBlob(song.blob, `${song.title.replace(/\s+/g, "-").toLowerCase()}.mp3`);
+    const audioInfo = audioFileInfo(song.blob);
+    downloadBlob(song.blob, `${song.title.replace(/\s+/g, "-").toLowerCase()}.${audioInfo.extension}`);
   };
   const saveText = (content: string, suffix: string, type = "text/plain") => {
     if (!song) return;
@@ -2947,8 +2968,9 @@ export default function Home() {
     setLyrics(lyricsOverride ?? song.generatedLyrics ?? "");
     setSourceMode(true);
     setSourceKind("audio");
+    const audioInfo = audioFileInfo(song.blob);
     setSourceFile(
-      new File([song.blob], `${song.title}.mp3`, { type: "audio/mpeg" }),
+      new File([song.blob], `${song.title}.${audioInfo.extension}`, { type: audioInfo.type }),
     );
     setPrompt(`${revisionStrengthText(revisionStrength)}\n\n${emotionLock ? "Emotion Lock: preserve the original emotional identity, intimacy/energy balance and overall feeling unless the requested change explicitly requires otherwise.\n\n" : ""}Requested change: ${instruction}`);
     setTitle(`${song.title} — ${label}`);
@@ -2968,8 +2990,9 @@ export default function Home() {
   };
   const quickShare = async () => {
     if (!song) return;
-    const file = new File([song.blob], `${song.title}.mp3`, {
-      type: "audio/mpeg",
+    const audioInfo = audioFileInfo(song.blob);
+    const file = new File([song.blob], `${song.title}.${audioInfo.extension}`, {
+      type: audioInfo.type,
     });
     try {
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
@@ -3962,19 +3985,27 @@ export default function Home() {
                     const images = files.filter((file) => file.type.startsWith("image/")).slice(0, 20);
                     const video = files.find((file) => file.type.startsWith("video/")) || null;
                     const audio = files.find((file) => file.type.startsWith("audio/")) || null;
-                    setMemoryPhotos(images);
-                    setVideoSourceFile(video);
+                    setActiveSourcePanel(null);
+                    setSourceText("");
+                    setSourceUrl("");
+                    setVisualScoreFile(null);
                     if (audio) {
+                      setMemoryPhotos([]);
+                      setVideoSourceFile(null);
                       setSourceFile(audio);
                       setSourceKind("audio");
                       setSourceMode(true);
-                      setMessage("Audio attached. Describe the cover, remix or transformation you want.");
+                      setMessage(files.length > 1 ? "Audio selected as the primary source. Other selected media were ignored to avoid mixing creation modes." : "Audio attached. Describe the cover, remix or transformation you want.");
                     } else if (video) {
+                      setMemoryPhotos([]);
+                      setVideoSourceFile(video);
                       setSourceFile(null);
                       setSourceKind("idea");
                       setSourceMode(false);
-                      setMessage("Video attached. Describe how the music should follow the moment.");
+                      setMessage(files.length > 1 ? "Video selected as the primary source. Add photos later for a Memory Movie." : "Video attached. Describe how the music should follow the moment.");
                     } else if (images.length) {
+                      setMemoryPhotos(images);
+                      setVideoSourceFile(null);
                       setSourceFile(null);
                       setSourceKind("idea");
                       setSourceMode(false);
@@ -5141,15 +5172,15 @@ export default function Home() {
                     {groupCollectUrl && <section className="group-share-card" aria-label="Group Song sharing page">
                       <div className="group-share-card-head">
                         <div className="group-share-icon"><UserCircle /></div>
-                        <div><span className="group-share-eyebrow">GROUP SONG 2.0</span><b>Your Group Song page is ready</b><small>Share this private page with friends or family. They can add memories, messages, song ideas, one photo and vote on what matters most.</small></div>
+                        <div><span className="group-share-eyebrow">GROUP SONG 2.0</span><b>Your Group Song page is ready</b><small>Share this unlisted page with friends or family. They can add memories, messages, song ideas, one photo and vote on what matters most.</small></div>
                       </div>
                       <div className="group-share-actions">
-                        <button className="group-share-primary" onClick={() => void navigator.clipboard?.writeText(groupCollectUrl).then(()=>notify("Private Group Song link copied.")).catch(()=>setMessage("Could not copy the group link."))}><Copy /> Copy private link</button>
+                        <button className="group-share-primary" onClick={() => void navigator.clipboard?.writeText(groupCollectUrl).then(()=>notify("Unlisted Group Song link copied.")).catch(()=>setMessage("Could not copy the group link."))}><Copy /> Copy unlisted link</button>
                         <button onClick={() => window.open(groupCollectUrl,"_blank","noopener,noreferrer")}><ExternalLink /> Open group page</button>
                       </div>
-                      <div className="group-share-url"><span>{groupCollectUrl}</span><button aria-label="Copy Group Song link" onClick={() => void navigator.clipboard?.writeText(groupCollectUrl).then(()=>notify("Private Group Song link copied.")).catch(()=>setMessage("Could not copy the group link."))}><Copy /></button></div>
+                      <div className="group-share-url"><span>{groupCollectUrl}</span><button aria-label="Copy Group Song link" onClick={() => void navigator.clipboard?.writeText(groupCollectUrl).then(()=>notify("Unlisted Group Song link copied.")).catch(()=>setMessage("Could not copy the group link."))}><Copy /></button></div>
                       <div className="group-share-steps" aria-label="How Group Song works">
-                        <div><span>1</span><p><b>Share the link</b><small>Send the private page to your group.</small></p></div>
+                        <div><span>1</span><p><b>Share the link</b><small>Send the unlisted page to your group.</small></p></div>
                         <div><span>2</span><p><b>Collect ideas</b><small>They add memories, messages, song ideas and photos.</small></p></div>
                         <div><span>3</span><p><b>Build the song</b><small>Come back and choose Build from group ideas.</small></p></div>
                       </div>

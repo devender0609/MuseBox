@@ -1,11 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase, authenticatedUser } from "@/lib/supabase";
+import { isCantoaOwner } from "@/lib/owner";
+
+
+async function groupSongAllowed(admin: NonNullable<ReturnType<typeof adminSupabase>>, user: { id: string; email?: string | null }) {
+  if (isCantoaOwner(user.email)) return true;
+  const { data } = await admin.from("memberships").select("plan,status").eq("user_id", user.id).maybeSingle();
+  return data?.status === "active" && (data.plan === "Creator" || data.plan === "Studio");
+}
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await authenticatedUser(request);
   const admin = adminSupabase();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   if (!admin) return NextResponse.json({ error: "Cloud collaboration is not configured." }, { status: 503 });
+  if (!(await groupSongAllowed(admin, user))) return NextResponse.json({ error: "Group Song requires Creator or Studio." }, { status: 402 });
   const { id } = await params;
   const { data: song } = await admin.from("songs").select("id,title").eq("id", id).eq("user_id", user.id).maybeSingle();
   if (!song) return NextResponse.json({ error: "Song not found in your cloud library." }, { status: 404 });
@@ -29,6 +38,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const admin = adminSupabase();
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   if (!admin) return NextResponse.json({ error: "Cloud collaboration is not configured." }, { status: 503 });
+  if (!(await groupSongAllowed(admin, user))) return NextResponse.json({ error: "Group Song requires Creator or Studio." }, { status: 402 });
   const { id } = await params;
   const { data: collection, error } = await admin.from("moment_collections").select("id,token").eq("song_id", id).eq("owner_id", user.id).maybeSingle();
   if (error) return NextResponse.json({ error: "Run the latest Supabase setup before using Group Song." }, { status: 503 });

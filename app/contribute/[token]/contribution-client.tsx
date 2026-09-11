@@ -100,6 +100,6 @@ export default function ContributionClient({ token }: { token: string }) {
       <div className="group-contribution-copy"><span className="group-kind-badge">{item.kind==="idea"?"SONG IDEA":item.kind.toUpperCase()}</span><b>{item.contributor||"Someone"}</b><p>{item.memory}</p>{item.feeling&&<small>Feeling: {item.feeling}</small>}</div>
       <button type="button" className="group-vote" onClick={()=>void vote(item.id)} aria-label={`Vote for contribution from ${item.contributor||"Someone"}`}>♡ <span>{item.votes||0}</span></button>
     </article>)}</div>}
-    <em>Anyone with this private link can contribute and see the shared ideas. Only the song creator can turn them into a Cantoa song.</em>
+    <em>Anyone with this unlisted link can contribute and see the shared ideas. Only the song creator can turn them into a Cantoa song.</em>
   </section>;
 }

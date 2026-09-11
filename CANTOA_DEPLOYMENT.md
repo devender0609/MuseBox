@@ -114,7 +114,7 @@ Production smoke test order:
 
 ### v17.5 first-song repair
 
-The previous migration inferred a claimed free song from `minutes_remaining < 2`. That was too aggressive for pre-existing/test accounts. v17.5 removes that inference and records a one-time repair in `public.cantoa_schema_migrations`. For the transition, cloud-saved songs are used as evidence of a delivered song. Accounts without such evidence are restored to one free song up to 2 minutes. Re-running the setup file later will not repeat the repair.
+The previous migration inferred a claimed free song from `minutes_remaining < 2`. That was too aggressive for pre-existing/test accounts. v17.5 removes that inference and records a one-time repair in `public.cantoa_schema_migrations`. For the transition, cloud-saved songs are used as evidence of a delivered song. Accounts without such evidence are repaired toward the current two-free-song entitlement, with each free creation capped at 2 minutes. Re-running the setup file later will not repeat the repair.
 
 
 ## v17.9 competitive features
@@ -249,3 +249,15 @@ No Supabase migration or new environment variable is required. Deploy normally. 
 - No SQL migration.
 - No new environment variables.
 - Includes every v18.8.43 billing/account/Owner Console correction plus diagnostic-label and fallback-classification polish.
+
+
+## v18.8.46 reliability hardening
+
+- Website-only creation no longer requires a separate typed prompt; pasted HTTPS links become a safe generic song brief before source extraction.
+- Webpage redirects are followed only through revalidated public HTTPS hosts, with a bounded redirect count and stronger IPv4-mapped IPv6 private-address blocking.
+- Music, planning, remix and cloud metadata now share the same 5-minute server ceiling advertised in the UI.
+- Remix and visual-score APIs validate media type/size server-side.
+- Group Song Creator+ entitlement is enforced on the server for owner create/read actions; recipient contribution links remain intentionally account-free.
+- Cloud deletion stops before deleting the database row if storage deletion fails.
+- Native audio MIME/extension is preserved for downloads, sharing, revisions and cloud upload metadata where supported.
+- No SQL migration and no new environment variables are required.

@@ -5312,3 +5312,46 @@ html[data-theme="dark"] .smart-create-directions button.active,.theme-dark .smar
 .owner-fallback-reasons{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.owner-fallback-reasons span{border:1px solid rgba(85,60,110,.14);background:rgba(255,255,255,.58);border-radius:999px;padding:7px 10px;font-size:12px}.owner-latency-split{margin-top:18px}
 
 .owner-load-more{display:block;margin:18px auto 2px;border:1px solid rgba(58,37,73,.18);background:#fff;border-radius:999px;padding:9px 16px;font-weight:800;cursor:pointer}.dark .owner-load-more{background:#241d2b;color:#fff;border-color:rgba(255,255,255,.15)}
+
+/* v18.8.46 readability pass: keep secondary controls compact without falling into 8–9px UI text. */
+.smart-create-understood small,
+.smart-create-chips i,
+.smart-create-directions > span,
+.smart-create-directions button,
+.starter-more,
+.story-vibe-picks > span,
+.story-vibe-picks button,
+.advanced-language-panel > summary small,
+.language-detail-groups b,
+.language-detail-groups span,
+.language-details > small,
+.provider-language-note,
+.section-language-grid > small,
+.pronunciation-editor-heading span,
+.pronunciation-editor > small,
+.language-blend-presets > span,
+.language-blend-presets button { font-size:10.5px!important; }
+
+.my-voice-quick-head small,
+.my-voice-quick-tip,
+.my-voice-clone-note,
+.my-voice-clip > small,
+.my-voice-list small,
+.my-voice-limit,
+.my-voice-purpose small,
+.my-voice-original-note,
+.my-voice-guide,
+.my-voice-guide b,
+.my-voice-guide small,
+.my-voice-reusable > summary small { font-size:10.5px!important; }
+.my-voice-source > button,
+.my-voice-upload,
+.my-voice-create-button,
+.my-voice-purpose button,
+.my-voice-profile-picker button,
+.my-voice-actions button,
+.my-voice-list button { font-size:10.5px!important; min-height:34px; }
+.my-voice-purpose > b,
+.my-voice-profile-picker > b,
+.my-voice-list b,
+.my-voice-reusable > summary b { font-size:11px!important; }

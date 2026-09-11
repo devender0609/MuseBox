@@ -23,12 +23,14 @@ export async function DELETE(
     .maybeSingle();
   if (!data)
     return NextResponse.json({ error: "Song not found." }, { status: 404 });
-  await admin.storage
+  const { error: storageError } = await admin.storage
     .from("songs")
     .remove([
       data.storage_key,
       data.storage_key.replace(/\.mp3$/, "-lyrics.txt"),
     ]);
+  if (storageError)
+    return NextResponse.json({ error: "Cloud audio could not be removed. Nothing was deleted; please try again." }, { status: 500 });
   const { error } = await admin
     .from("songs")
     .delete()

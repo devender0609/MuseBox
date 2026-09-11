@@ -6,8 +6,10 @@ export async function POST(request:NextRequest){
   try{
     const key=process.env.ELEVENLABS_API_KEY;
     if(!key)return NextResponse.json({error:"Connect ELEVENLABS_API_KEY to remix uploaded audio."},{status:503});
-    const incoming=await request.formData();const file=incoming.get("file");const prompt=String(incoming.get("prompt")||"").trim();const duration=Math.min(600,Math.max(10,Number(incoming.get("duration"))||60));
-    if(!(file instanceof File))return NextResponse.json({error:"Upload an audio file first."},{status:400});
+    const incoming=await request.formData();const file=incoming.get("file");const prompt=String(incoming.get("prompt")||"").trim();const duration=Math.min(300,Math.max(10,Number(incoming.get("duration"))||60));
+    if(!(file instanceof File)||file.size===0)return NextResponse.json({error:"Upload an audio file first."},{status:400});
+    if(!file.type.startsWith("audio/"))return NextResponse.json({error:"Audio remix accepts an audio file."},{status:415});
+    if(file.size>50*1024*1024)return NextResponse.json({error:"Keep audio references under 50 MB."},{status:413});
     if(prompt.length<8)return NextResponse.json({error:"Describe how you want to transform the audio."},{status:400});
     charged=duration/60;try{await enforceRateLimit(request,"remix",8,3600);reservation=await reserveMinutes(request,charged)}catch(error){const issue=usageError(error);return NextResponse.json({error:issue.error},{status:issue.status})}
     const upload=new FormData();upload.append("file",file);upload.append("extract_composition_plan","music_v2");

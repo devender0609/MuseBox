@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
         { error: "This song brief is too long to pre-plan. Shorten the description or source material and try again." },
         { status: 400 },
       );
-    const duration = Math.min(600, Math.max(10, Number(body.duration) || 30));
+    const duration = Math.min(300, Math.max(10, Number(body.duration) || 30));
     try {
       await ensureGenerationAccess(request, duration / 60);
       await enforceRateLimit(request, "plan", 12, 3600);

@@ -9,7 +9,10 @@ const blockedHost = /^(localhost|0\.0\.0\.0|127\.|10\.|192\.168\.|169\.254\.|172
 function privateIp(value: string) {
   const ip = value.replace(/^\[|\]$/g, "").toLowerCase();
   if (!isIP(ip)) return false;
-  if (ip.includes(":")) return ip === "::1" || ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe8") || ip.startsWith("fe9") || ip.startsWith("fea") || ip.startsWith("feb") || ip.startsWith("::ffff:127.") || ip.startsWith("::ffff:10.") || ip.startsWith("::ffff:192.168.");
+  if (ip.includes(":")) {
+    if (ip.startsWith("::ffff:")) return privateIp(ip.slice(7));
+    return ip === "::1" || ip.startsWith("fc") || ip.startsWith("fd") || ip.startsWith("fe8") || ip.startsWith("fe9") || ip.startsWith("fea") || ip.startsWith("feb");
+  }
   const [a,b] = ip.split(".").map(Number);
   return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
 }
@@ -17,6 +20,24 @@ async function assertPublicHost(hostname: string) {
   if (blockedHost.test(hostname) || privateIp(hostname)) throw new Error("PRIVATE_HOST");
   const addresses = await lookup(hostname, { all: true, verbatim: true });
   if (!addresses.length || addresses.some((item) => privateIp(item.address))) throw new Error("PRIVATE_HOST");
+}
+
+async function fetchPublicPage(start: URL) {
+  let current = start;
+  for (let hop = 0; hop < 4; hop += 1) {
+    await assertPublicHost(current.hostname);
+    const response = await fetch(current, { redirect: "manual", headers: { "User-Agent": "Cantoa/1.0 song-source reader", Accept: "text/html,text/plain" } });
+    if ([301,302,303,307,308].includes(response.status)) {
+      const location = response.headers.get("location");
+      if (!location) return response;
+      const next = new URL(location, current);
+      if (next.protocol !== "https:" || next.username || next.password) throw new Error("PRIVATE_HOST");
+      current = next;
+      continue;
+    }
+    return response;
+  }
+  throw new Error("TOO_MANY_REDIRECTS");
 }
 async function readLimited(response: Response, maxBytes = 2_000_000) {
   const declared = Number(response.headers.get("content-length") || 0);
@@ -45,8 +66,7 @@ export async function POST(request: NextRequest) {
     const value = String((await request.json()).url || "").trim();
     const url = new URL(value);
     if (url.protocol !== "https:" || url.username || url.password) return NextResponse.json({ error: "Enter a public HTTPS webpage." }, { status: 400 });
-    await assertPublicHost(url.hostname);
-    const response = await fetch(url, { redirect: "error", headers: { "User-Agent": "Cantoa/1.0 song-source reader", Accept: "text/html,text/plain" } });
+    const response = await fetchPublicPage(url);
     if (!response.ok) return NextResponse.json({ error: "This webpage could not be read. Paste its text instead." }, { status: 422 });
     const type = response.headers.get("content-type") || "";
     if (!/text\/(html|plain)/i.test(type)) return NextResponse.json({ error: "This link is not a readable webpage. Paste its text instead." }, { status: 415 });
@@ -59,6 +79,7 @@ export async function POST(request: NextRequest) {
     const code = error instanceof Error ? error.message : "";
     if (code === "PRIVATE_HOST") return NextResponse.json({ error: "Private or local network addresses cannot be used as webpage sources." }, { status: 400 });
     if (code === "TOO_LARGE") return NextResponse.json({ error: "This webpage is too large to import safely. Paste the relevant text instead." }, { status: 413 });
+    if (code === "TOO_MANY_REDIRECTS") return NextResponse.json({ error: "This webpage redirects too many times. Paste the relevant text instead." }, { status: 422 });
     return NextResponse.json({ error: "Enter a valid public HTTPS webpage." }, { status: 400 });
   }
 }
