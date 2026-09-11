@@ -11,12 +11,13 @@ export async function POST(
   if (!admin) return NextResponse.json({ error: "Cloud sharing is not configured." }, { status: 503 });
   const { id } = await params;
   const body = await request.json().catch(() => ({}));
-  const { data: song } = await admin
+  const { data: song, error: songError } = await admin
     .from("songs")
     .select("id,share_token")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();
+  if (songError) return NextResponse.json({ error: "The cloud library could not verify this song right now." }, { status: 503 });
   if (!song) return NextResponse.json({ error: "Song not found in your cloud library." }, { status: 404 });
   const token = song.share_token || crypto.randomUUID().replaceAll("-", "");
   const { error } = await admin

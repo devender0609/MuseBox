@@ -9,9 +9,10 @@ async function entitlement(userId: string, email?: string | null) {
   if (isCantoaOwner(email)) return { allowed: true, limit: 10, plan: "Owner" };
   const admin = adminSupabase();
   if (!admin) return { allowed: false, limit: 0, plan: "Explore" };
-  const { data } = await admin.from("memberships").select("plan,status").eq("user_id", userId).maybeSingle();
-  const plan = data?.status === "active" ? String(data.plan || "Explore") : "Explore";
-  return { allowed: plan === "Creator" || plan === "Studio", limit: plan === "Studio" ? 3 : plan === "Creator" ? 1 : 0, plan };
+  const { data, error } = await admin.from("memberships").select("plan,status").eq("user_id", userId).maybeSingle();
+  if (error || !data) return { allowed: false, limit: 0, plan: "Unavailable", verificationError: true };
+  const plan = data.status === "active" ? String(data.plan || "Explore") : "Explore";
+  return { allowed: plan === "Creator" || plan === "Studio", limit: plan === "Studio" ? 3 : plan === "Creator" ? 1 : 0, plan, verificationError: false };
 }
 
 function profilesFromUser(user: any): VoiceProfile[] {
@@ -23,6 +24,7 @@ export async function GET(request: Request) {
   const user = await authenticatedUser(request);
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   const ent = await entitlement(user.id, user.email);
+  if (ent.verificationError) return NextResponse.json({ error: "My Voice membership access could not be verified right now." }, { status: 503 });
   return NextResponse.json({ profiles: profilesFromUser(user), limit: ent.limit, plan: ent.plan, supportedUse: "spoken_voice" });
 }
 
@@ -30,6 +32,7 @@ export async function POST(request: Request) {
   const user = await authenticatedUser(request);
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   const ent = await entitlement(user.id, user.email);
+  if (ent.verificationError) return NextResponse.json({ error: "My Voice membership access could not be verified right now." }, { status: 503 });
   if (!ent.allowed) return NextResponse.json({ error: "My Voice requires Creator or Studio." }, { status: 402 });
   if (ent.plan !== "Owner") {
     try { await enforceRateLimit(request, "my_voice_create", 5, 24 * 60 * 60); }

@@ -63,11 +63,17 @@ export async function POST(request: NextRequest) {
   const id = String(form.get("id") || crypto.randomUUID());
   const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   if (!uuid.test(id)) return NextResponse.json({ error: "Invalid song identifier." }, { status: 400 });
+  // Service-role writes bypass row-level security. Never let a caller-supplied UUID
+  // collide with a song owned by another account and turn an upsert into a cross-user overwrite.
+  const { data: existingId, error: existingIdError } = await admin.from("songs").select("user_id").eq("id", id).maybeSingle();
+  if (existingIdError) return NextResponse.json({ error: "The cloud library could not verify this song identifier." }, { status: 503 });
+  if (existingId && existingId.user_id !== user.id) return NextResponse.json({ error: "That song identifier is already in use." }, { status: 409 });
   if (file.size === 0 || file.size > 50 * 1024 * 1024) return NextResponse.json({ error: "Song audio must be between 1 byte and 50 MB." }, { status: 413 });
   const parentIdRaw = String(form.get("parentId") || "");
   let parentId = parentIdRaw && uuid.test(parentIdRaw) ? parentIdRaw : null;
   if (parentId) {
-    const { data: parent } = await admin.from("songs").select("id").eq("id", parentId).eq("user_id", user.id).maybeSingle();
+    const { data: parent, error: parentError } = await admin.from("songs").select("id").eq("id", parentId).eq("user_id", user.id).maybeSingle();
+    if (parentError) return NextResponse.json({ error: "The cloud library could not verify the parent song." }, { status: 503 });
     if (!parent) parentId = null;
   }
   const mode = String(form.get("mode") || "vocals");

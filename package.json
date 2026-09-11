@@ -1,6 +1,6 @@
 {
   "name": "cantoa-ai-music-studio",
-  "version": "0.18.8.49",
+  "version": "0.18.8.50",
   "private": true,
   "engines": {
     "node": "22.x"
@@ -10,9 +10,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "npm run build && node --test tests/*.test.mjs",
+    "test": "npm run build && npm run test:current",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
+    "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate",
+    "test:current": "node --test tests/cantoa-v18-8-50.test.mjs",
+    "test:historical": "node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

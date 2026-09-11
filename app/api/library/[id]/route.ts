@@ -15,21 +15,24 @@ export async function DELETE(
       { status: 503 },
     );
   const { id } = await params;
-  const { data } = await admin
+  const { data, error: songReadError } = await admin
     .from("songs")
     .select("id,storage_key")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();
+  if (songReadError) return NextResponse.json({ error: "The cloud library could not verify this song right now." }, { status: 503 });
   if (!data)
     return NextResponse.json({ error: "Song not found." }, { status: 404 });
   // Gather any Group Song photos tied to this song so deleting the song does not
   // leave private orphan files consuming storage after the database cascade runs.
-  const { data: collections } = await admin.from("moment_collections").select("id").eq("song_id", id).eq("owner_id", user.id);
+  const { data: collections, error: collectionsError } = await admin.from("moment_collections").select("id").eq("song_id", id).eq("owner_id", user.id);
+  if (collectionsError) return NextResponse.json({ error: "Cantoa could not verify related Group Song files, so nothing was deleted. Please try again." }, { status: 503 });
   const collectionIds = (collections || []).map((item) => item.id);
   let groupPhotoPaths: string[] = [];
   if (collectionIds.length) {
-    const { data: contributions } = await admin.from("moment_contributions").select("photo_path").in("collection_id", collectionIds);
+    const { data: contributions, error: contributionsError } = await admin.from("moment_contributions").select("photo_path").in("collection_id", collectionIds);
+    if (contributionsError) return NextResponse.json({ error: "Cantoa could not verify related Group Song photos, so nothing was deleted. Please try again." }, { status: 503 });
     groupPhotoPaths = (contributions || []).map((item) => String(item.photo_path || "")).filter(Boolean);
   }
   const storageKeys = [

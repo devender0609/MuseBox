@@ -198,9 +198,12 @@ create or replace function public.check_cantoa_rate_limit(p_user_id uuid,p_actio
 returns boolean language plpgsql security definer set search_path=public as $$
 declare recent_count integer;
 begin
+  -- Serialize the count+insert pair for one user/action so multiple browser tabs
+  -- cannot race through the same short-window limit concurrently.
+  perform pg_advisory_xact_lock(hashtext(p_user_id::text || ':' || left(p_action,40)));
   delete from cantoa_rate_limits where user_id=p_user_id and created_at < now() - interval '24 hours';
   select count(*) into recent_count from cantoa_rate_limits
-    where user_id=p_user_id and action=p_action
+    where user_id=p_user_id and action=left(p_action,40)
       and created_at >= now() - make_interval(secs => greatest(1,p_window_seconds));
   if recent_count >= greatest(1,p_limit) then return false; end if;
   insert into cantoa_rate_limits(user_id,action) values(p_user_id,left(p_action,40));
@@ -411,4 +414,14 @@ grant execute on function public.check_cantoa_public_rate_limit(text,text,intege
 
 insert into public.cantoa_schema_migrations(migration_key)
 values('v18.8.49_public_rate_limit_billing_country')
+on conflict(migration_key) do nothing;
+
+-- v18.8.50: crash-safe webhook claims and atomic authenticated rate limiting.
+alter table public.stripe_webhook_events add column if not exists status text not null default 'processed';
+alter table public.stripe_webhook_events add column if not exists claim_token text;
+alter table public.stripe_webhook_events add column if not exists claimed_at timestamptz;
+alter table public.stripe_webhook_events alter column processed_at drop not null;
+create index if not exists stripe_webhook_events_status_idx on public.stripe_webhook_events(status,claimed_at);
+insert into public.cantoa_schema_migrations(migration_key)
+values('v18.8.50_atomic_rate_limit_crash_safe_webhooks')
 on conflict(migration_key) do nothing;

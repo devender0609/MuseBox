@@ -32,21 +32,24 @@ export async function POST(request: NextRequest) {
     // than opening a second subscription checkout. This prevents duplicate billing
     // when moving between Creator and Studio.
     const admin = adminSupabase();
-    if (admin) {
-      const { data: membership } = await admin
-        .from("memberships")
-        .select("plan,status,stripe_subscription_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      const alreadyPaid = membership && (membership.plan === "Creator" || membership.plan === "Studio")
-        && membership.status !== "canceled" && membership.status !== "cancelled"
-        && Boolean(membership.stripe_subscription_id);
-      if (alreadyPaid) {
-        return NextResponse.json({
-          error: "You already have a paid Cantoa membership. Use Manage membership to change or cancel your current plan.",
-          manageMembershipUrl: "/api/stripe/customer-portal",
-        }, { status: 409 });
-      }
+    // Checkout must fail closed if membership state cannot be verified. Otherwise a
+    // transient database/configuration failure could allow an existing paid member
+    // to open a second Stripe subscription.
+    if (!admin) return NextResponse.json({ error: "Membership verification is not configured, so checkout is temporarily unavailable." }, { status: 503 });
+    const { data: membership, error: membershipError } = await admin
+      .from("memberships")
+      .select("plan,status,stripe_subscription_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (membershipError) return NextResponse.json({ error: "Cantoa could not verify your current membership. Please try checkout again shortly." }, { status: 503 });
+    const alreadyPaid = membership && (membership.plan === "Creator" || membership.plan === "Studio")
+      && membership.status !== "canceled" && membership.status !== "cancelled"
+      && Boolean(membership.stripe_subscription_id);
+    if (alreadyPaid) {
+      return NextResponse.json({
+        error: "You already have a paid Cantoa membership. Use Manage membership to change or cancel your current plan.",
+        manageMembershipUrl: "/api/stripe/customer-portal",
+      }, { status: 409 });
     }
 
     const india = countryFrom(request) === "IN";

@@ -23,18 +23,19 @@ export async function GET(request: NextRequest) {
       isOwner: false,
       cloudConfigured: false,
     });
-  let { data } = await admin
+  let { data, error: membershipError } = await admin
     .from("memberships")
     .select("plan,status,minutes_remaining,current_period_end,free_song_claimed,free_songs_remaining,billing_currency,billing_amount_minor")
     .eq("user_id", user.id)
     .maybeSingle();
+  if (membershipError) return NextResponse.json({ error: "Your membership could not be loaded right now." }, { status: 503 });
 
   // Authentication and membership are one product account. The database trigger normally
   // creates this row, but self-heal here as well so a valid Supabase user can never end up
   // with a "signed in but no Cantoa account" state if the trigger was installed late or a
   // transient setup race occurred. ignoreDuplicates protects existing paid memberships.
   if (!data) {
-    await admin.from("memberships").upsert(
+    const { error: repairError } = await admin.from("memberships").upsert(
       {
         user_id: user.id,
         email: user.email || null,
@@ -47,11 +48,13 @@ export async function GET(request: NextRequest) {
       },
       { onConflict: "user_id", ignoreDuplicates: true },
     );
+    if (repairError) return NextResponse.json({ error: "Your Cantoa account could not be initialized right now." }, { status: 503 });
     const repaired = await admin
       .from("memberships")
       .select("plan,status,minutes_remaining,current_period_end,free_song_claimed,free_songs_remaining,billing_currency,billing_amount_minor")
       .eq("user_id", user.id)
       .maybeSingle();
+    if (repaired.error || !repaired.data) return NextResponse.json({ error: "Your Cantoa account could not be initialized right now." }, { status: 503 });
     data = repaired.data;
   }
 

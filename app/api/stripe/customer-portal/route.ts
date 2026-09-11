@@ -12,11 +12,12 @@ export async function POST(request: NextRequest) {
   const admin = adminSupabase();
   if (!secret || !admin) return NextResponse.json({ error: "Membership management is not configured." }, { status: 503 });
 
-  const { data: membership } = await admin
+  const { data: membership, error: membershipError } = await admin
     .from("memberships")
     .select("stripe_customer_id")
     .eq("user_id", user.id)
     .maybeSingle();
+  if (membershipError) return NextResponse.json({ error: "Cantoa could not verify your Stripe membership right now." }, { status: 503 });
   if (!membership?.stripe_customer_id) return NextResponse.json({ error: "No paid Stripe membership was found for this account." }, { status: 404 });
 
   try {

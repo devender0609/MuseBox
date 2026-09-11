@@ -38,13 +38,17 @@ async function contributionPayload(admin: NonNullable<ReturnType<typeof adminSup
   }));
 }
 
-export async function GET(_request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const admin = adminSupabase();
   if (!admin) return NextResponse.json({ error: "Contributions are not configured." }, { status: 503 });
   const { token } = await params;
+  const limiter = await checkPublicRateLimit(request, `group-read:${token}`, 120, 10 * 60);
+  if (!limiter.ok) return NextResponse.json({ error: "This Group Song is being refreshed too quickly. Please wait a moment and try again." }, { status: 429, headers: { "Retry-After": String(limiter.retryAfterSeconds) } });
   const { data: collection, error } = await admin.from("moment_collections").select("id,open,song_id").eq("token", token).maybeSingle();
-  if (error || !collection?.open) return NextResponse.json({ error: "This contribution link is unavailable." }, { status: 404 });
-  const { data: song } = await admin.from("songs").select("title").eq("id", collection.song_id).maybeSingle();
+  if (error) return NextResponse.json({ error: "This Group Song could not be loaded right now." }, { status: 500 });
+  if (!collection?.open) return NextResponse.json({ error: "This contribution link is unavailable." }, { status: 404 });
+  const { data: song, error: songError } = await admin.from("songs").select("title").eq("id", collection.song_id).maybeSingle();
+  if (songError) return NextResponse.json({ error: "Could not load the shared song right now." }, { status: 500 });
   try {
     const contributions = await contributionPayload(admin, collection.id);
     return NextResponse.json({ title: song?.title || "Group Song", contributions });
@@ -82,7 +86,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (photo && (!allowedPhotoTypes.has(photo.type) || photo.size > 5 * 1024 * 1024)) return NextResponse.json({ error: "Photo must be a JPG, PNG or WebP up to 5 MB." }, { status: 400 });
 
   const { data: collection, error } = await admin.from("moment_collections").select("id,open").eq("token", token).maybeSingle();
-  if (error || !collection?.open) return NextResponse.json({ error: "This contribution link is unavailable." }, { status: 404 });
+  if (error) return NextResponse.json({ error: "This Group Song could not be verified right now." }, { status: 500 });
+  if (!collection?.open) return NextResponse.json({ error: "This contribution link is unavailable." }, { status: 404 });
 
   let photo_path: string | null = null;
   if (photo) {

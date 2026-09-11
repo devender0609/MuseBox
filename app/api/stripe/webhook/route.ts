@@ -41,18 +41,67 @@ function missingColumn(error: { message?: string } | null | undefined, column: s
   return Boolean(error && new RegExp(`${column}|schema cache`, "i").test(error.message || ""));
 }
 
-async function claimWebhookEvent(admin: NonNullable<ReturnType<typeof adminSupabase>>, eventId: string) {
-  const { error } = await admin.from("stripe_webhook_events").insert({ event_id: eventId });
-  if (!error) return "claimed" as const;
-  if (error.code === "23505" || /duplicate|unique/i.test(error.message || "")) return "duplicate" as const;
-  // Backward compatible until the v18.8.49 migration is run.
-  if (/stripe_webhook_events|schema cache|relation .* does not exist/i.test(error.message || "")) return "unavailable" as const;
-  throw new Error(`WEBHOOK_EVENT_CLAIM_FAILED:${error.message}`);
+type WebhookClaim = { state: "claimed"; token: string } | { state: "duplicate" | "in_progress" | "unavailable"; token: null };
+
+async function claimWebhookEvent(admin: NonNullable<ReturnType<typeof adminSupabase>>, eventId: string): Promise<WebhookClaim> {
+  const token = crypto.randomUUID();
+  const now = new Date();
+  const { error } = await admin.from("stripe_webhook_events").insert({
+    event_id: eventId,
+    status: "processing",
+    claim_token: token,
+    claimed_at: now.toISOString(),
+    processed_at: null,
+  });
+  if (!error) return { state: "claimed", token };
+  // Backward compatible until the v18.8.50 migration is run.
+  if (/status|claim_token|claimed_at|schema cache|stripe_webhook_events|relation .* does not exist/i.test(error.message || "") && error.code !== "23505") {
+    const legacy = await admin.from("stripe_webhook_events").insert({ event_id: eventId });
+    if (!legacy.error) return { state: "claimed", token: `legacy:${eventId}` };
+    if (legacy.error.code === "23505" || /duplicate|unique/i.test(legacy.error.message || "")) return { state: "duplicate", token: null };
+    if (/stripe_webhook_events|schema cache|relation .* does not exist/i.test(legacy.error.message || "")) return { state: "unavailable", token: null };
+    throw new Error(`WEBHOOK_EVENT_CLAIM_FAILED:${legacy.error.message}`);
+  }
+  if (!(error.code === "23505" || /duplicate|unique/i.test(error.message || ""))) throw new Error(`WEBHOOK_EVENT_CLAIM_FAILED:${error.message}`);
+
+  const { data: existing, error: readError } = await admin.from("stripe_webhook_events")
+    .select("status,claim_token,claimed_at")
+    .eq("event_id", eventId)
+    .maybeSingle();
+  if (readError) throw new Error(`WEBHOOK_EVENT_READ_FAILED:${readError.message}`);
+  if (!existing || existing.status === "processed") return { state: "duplicate", token: null };
+
+  const claimedAt = existing.claimed_at ? new Date(existing.claimed_at).getTime() : 0;
+  const staleBefore = Date.now() - 5 * 60 * 1000;
+  if (claimedAt && claimedAt > staleBefore) return { state: "in_progress", token: null };
+
+  // Recover a claim left behind by a crashed serverless invocation. Match the old
+  // token so only one retry can take ownership of the stale claim.
+  let takeover = admin.from("stripe_webhook_events").update({ claim_token: token, claimed_at: now.toISOString(), status: "processing", processed_at: null }).eq("event_id", eventId);
+  if (existing.claim_token) takeover = takeover.eq("claim_token", existing.claim_token);
+  else takeover = takeover.is("claim_token", null);
+  const { data: taken, error: takeoverError } = await takeover.select("event_id").maybeSingle();
+  if (takeoverError) throw new Error(`WEBHOOK_EVENT_TAKEOVER_FAILED:${takeoverError.message}`);
+  return taken ? { state: "claimed", token } : { state: "in_progress", token: null };
 }
 
-async function releaseWebhookEvent(admin: NonNullable<ReturnType<typeof adminSupabase>>, eventId: string, claimed: boolean) {
-  if (!claimed) return;
-  await admin.from("stripe_webhook_events").delete().eq("event_id", eventId);
+async function completeWebhookEvent(admin: NonNullable<ReturnType<typeof adminSupabase>>, eventId: string, claimToken: string | null) {
+  if (!claimToken) return;
+  if (claimToken.startsWith("legacy:")) return;
+  const { error } = await admin.from("stripe_webhook_events")
+    .update({ status: "processed", processed_at: new Date().toISOString() })
+    .eq("event_id", eventId)
+    .eq("claim_token", claimToken);
+  if (error) throw new Error(`WEBHOOK_EVENT_COMPLETE_FAILED:${error.message}`);
+}
+
+async function releaseWebhookEvent(admin: NonNullable<ReturnType<typeof adminSupabase>>, eventId: string, claimToken: string | null) {
+  if (!claimToken) return;
+  if (claimToken.startsWith("legacy:")) {
+    await admin.from("stripe_webhook_events").delete().eq("event_id", eventId);
+    return;
+  }
+  await admin.from("stripe_webhook_events").delete().eq("event_id", eventId).eq("claim_token", claimToken);
 }
 
 export async function POST(request: NextRequest) {
@@ -74,16 +123,20 @@ export async function POST(request: NextRequest) {
   const admin = adminSupabase();
   if (!admin) return NextResponse.json({ error: "Membership database is not configured." }, { status: 503 });
 
-  let claimed = false;
+  let claimToken: string | null = null;
   try {
     const claim = await claimWebhookEvent(admin, event.id);
-    if (claim === "duplicate") return NextResponse.json({ received: true, duplicate: true });
-    claimed = claim === "claimed";
+    if (claim.state === "duplicate") return NextResponse.json({ received: true, duplicate: true });
+    if (claim.state === "in_progress") return NextResponse.json({ error: "This Stripe event is already being processed. Please retry." }, { status: 409 });
+    claimToken = claim.state === "claimed" ? claim.token : null;
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
       const userId = session.client_reference_id;
-      if (!userId) return NextResponse.json({ received: true, warning: "No Cantoa user reference" });
+      if (!userId) {
+        await completeWebhookEvent(admin, event.id, claimToken);
+        return NextResponse.json({ received: true, warning: "No Cantoa user reference" });
+      }
 
       let plan = session.metadata?.cantoa_plan === "Studio" ? "Studio" : "Creator";
       const billingCurrency = (session.metadata?.cantoa_currency || session.currency || "usd").toLowerCase();
@@ -206,9 +259,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    await completeWebhookEvent(admin, event.id, claimToken);
     return NextResponse.json({ received: true });
   } catch (error) {
-    await releaseWebhookEvent(admin, event.id, claimed);
+    await releaseWebhookEvent(admin, event.id, claimToken);
     console.error("[cantoa/stripe-webhook] processing failed", { eventId: event.id, type: event.type, error: error instanceof Error ? error.message : String(error) });
     // Return non-2xx so Stripe retries transient database/provider failures instead
     // of silently losing membership state.

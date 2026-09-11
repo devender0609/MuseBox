@@ -15,20 +15,26 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const existingCookie = request.cookies.get(cookieName)?.value || "";
   const voterToken = /^[0-9a-f-]{36}$/i.test(existingCookie) ? existingCookie : crypto.randomUUID();
 
-  const { data: collection } = await admin.from("moment_collections").select("id,open").eq("token", token).maybeSingle();
+  const { data: collection, error: collectionError } = await admin.from("moment_collections").select("id,open").eq("token", token).maybeSingle();
+  if (collectionError) return NextResponse.json({ error: "Voting is temporarily unavailable." }, { status: 500 });
   if (!collection?.open) return NextResponse.json({ error: "This contribution link is unavailable." }, { status: 404 });
-  const { data: contribution } = await admin.from("moment_contributions").select("id").eq("id", contributionId).eq("collection_id", collection.id).maybeSingle();
+  const { data: contribution, error: contributionError } = await admin.from("moment_contributions").select("id").eq("id", contributionId).eq("collection_id", collection.id).maybeSingle();
+  if (contributionError) return NextResponse.json({ error: "Voting is temporarily unavailable." }, { status: 500 });
   if (!contribution) return NextResponse.json({ error: "Contribution not found." }, { status: 404 });
 
-  const { data: existing } = await admin.from("moment_contribution_votes").select("id").eq("contribution_id", contributionId).eq("voter_token", voterToken).maybeSingle();
+  const { data: existing, error: existingError } = await admin.from("moment_contribution_votes").select("id").eq("contribution_id", contributionId).eq("voter_token", voterToken).maybeSingle();
+  if (existingError) return NextResponse.json({ error: "Voting is temporarily unavailable." }, { status: 500 });
   if (existing?.id) {
-    await admin.from("moment_contribution_votes").delete().eq("id", existing.id);
+    const { error: deleteError } = await admin.from("moment_contribution_votes").delete().eq("id", existing.id);
+    if (deleteError) return NextResponse.json({ error: "Could not update your vote right now." }, { status: 500 });
     const response = NextResponse.json({ ok: true, removed: true });
     response.cookies.set(cookieName, voterToken, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 24 * 365 });
     return response;
   }
   const { error } = await admin.from("moment_contribution_votes").insert({ contribution_id: contributionId, voter_token: voterToken });
-  if (error) return NextResponse.json({ error: "Could not save your vote." }, { status: 500 });
+  // Two near-simultaneous clicks can race between the read and insert. The unique
+  // constraint means the intended single vote already exists, so do not surface a false 500.
+  if (error && !(error.code === "23505" || /duplicate|unique/i.test(error.message || ""))) return NextResponse.json({ error: "Could not save your vote." }, { status: 500 });
   const response = NextResponse.json({ ok: true, removed: false });
   response.cookies.set(cookieName, voterToken, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 24 * 365 });
   return response;

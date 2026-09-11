@@ -17,8 +17,9 @@ export async function POST(request: Request) {
   if (isCantoaOwner(user.email)) return NextResponse.json({ allowed: true, plan: "Owner" });
   const admin = adminSupabase();
   if (!admin) return NextResponse.json({ allowed: false, error: "Membership is not configured." }, { status: 503 });
-  const { data } = await admin.from("memberships").select("plan,status").eq("user_id", user.id).maybeSingle();
-  const plan = data?.status === "active" ? String(data.plan || "Explore") : "Explore";
+  const { data, error } = await admin.from("memberships").select("plan,status").eq("user_id", user.id).maybeSingle();
+  if (error || !data) return NextResponse.json({ allowed: false, error: "Membership access could not be verified right now." }, { status: 503 });
+  const plan = data.status === "active" ? String(data.plan || "Explore") : "Explore";
   const allowed = planAllowsFeature(plan, feature);
   return NextResponse.json({ allowed, plan, minimumPlan: minimumPlanForFeature(feature) }, { status: allowed ? 200 : 402 });
 }
