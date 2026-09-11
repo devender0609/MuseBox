@@ -2349,7 +2349,7 @@ export default function Home() {
   };
 
   const copyGroupContributionRequest = async () => {
-    const text = `Help me make a Cantoa Group Song. Send me a short memory, message or song idea, plus the feeling you want the song to leave us with. If you use the private Cantoa link, you can also add a photo and vote on the ideas that matter most.`;
+    const text = `Help me make a Cantoa Group Song. Send me a short memory, message or song idea, plus the feeling you want the song to leave us with. If you use the unlisted Cantoa link, you can also add a photo and vote on the ideas that matter most.`;
     try { await navigator.clipboard.writeText(text); notify("Group contribution request copied."); }
     catch { setMessage(text); }
   };
@@ -2382,7 +2382,7 @@ export default function Home() {
       setGroupContributionCount(0);
       setGroupVoteCount(0);
       if (data.url) await navigator.clipboard?.writeText(data.url).catch(() => undefined);
-      notify("Private Group Song page ready and link copied.");
+      notify("Unlisted Group Song page ready and link copied.");
       void refreshGroupCollectionStatus();
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not create the group contribution link."); }
   };
@@ -3770,12 +3770,14 @@ export default function Home() {
         <nav>
           <button
             className={view === "create" ? "active" : ""}
+            disabled={generating || previewing}
             onClick={() => setView("create")}
           >
             <Plus /> Create
           </button>
           <button
             className={view === "library" ? "active" : ""}
+            disabled={generating || previewing}
             onClick={() => {
               void loadLibrary();
               setView("library");
@@ -3860,13 +3862,13 @@ export default function Home() {
             >
               <Crown /> Membership
             </button>
-            <button onClick={newSong}>
+            <button onClick={newSong} disabled={generating || previewing}>
               <Plus /> New song
             </button>
           </div>
         </header>
         {view === "create" && (
-          <div className="create-view">
+          <fieldset className="create-view" disabled={generating || previewing} aria-busy={generating || previewing}>
             <div className="create-heading v17-heading">
               <p>CANTOA MUSIC</p>
               <h1>Turn any moment into <i>music.</i></h1>
@@ -4742,7 +4744,7 @@ export default function Home() {
                 </article>
               </div>
             </section>
-          </div>
+          </fieldset>
         )}
         {view === "song" && song && (
           <div className="result-view">
@@ -5119,7 +5121,7 @@ export default function Home() {
                         <button onClick={() => void renderSocialVideo("vertical")} disabled={!socialVideoSupported || socialVideoRendering}><Video /><span><b>{socialVideoRendering && socialVideoFormat === "vertical" ? "Finding best moment…" : "Best Moment AI"}</b><small>Find a strong 15-second Reel moment automatically.</small></span></button>
                         <button onClick={() => void createMemoryCapsule()} disabled={!!action}><Gift /><span><b>Memory Capsule</b><small>Keep the song, story, photos and finished visuals together.</small></span></button>
                         <button onClick={() => prepareDerivedMoment("dna")}><Waves /><span><b>Song DNA</b><small>Reuse this song's creative identity in something new.</small></span></button>
-                        <button onClick={() => void createGroupCollection()}><UserCircle /><span><b>Group Song <em className="creator-badge">Creator+</em></b><small>Invite people to add memories, ideas and votes privately.</small></span></button>
+                        <button onClick={() => void createGroupCollection()}><UserCircle /><span><b>Group Song <em className="creator-badge">Creator+</em></b><small>Invite people with an unlisted link to add memories, ideas and votes.</small></span></button>
                       </div>
                     </div>
                     <details className="moment-lab-more-tools">
@@ -5143,7 +5145,7 @@ export default function Home() {
                           <p>CREATE TOGETHER</p>
                           {groupCollectUrl && <button onClick={() => void useCollectedMemories()}><Download /><span><b>Build from group ideas <em className="creator-badge">Creator+</em></b><small>Use contributions and prioritize the ideas your group voted for.</small></span></button>}
                           {!groupCollectUrl && <button onClick={() => void copyGroupContributionRequest()}><Copy /><span><b>Collect by message</b><small>Copy a simple request for chat or email.</small></span></button>}
-                          <button onClick={() => void createGroupCollection()}><UserCircle /><span><b>Create another Group Song <em className="creator-badge">Creator+</em></b><small>Start a private collection page for another group.</small></span></button>
+                          <button onClick={() => void createGroupCollection()}><UserCircle /><span><b>Create another Group Song <em className="creator-badge">Creator+</em></b><small>Start an unlisted collection page for another group.</small></span></button>
                         </section>
                       </div>
                     </details>

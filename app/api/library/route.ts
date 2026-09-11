@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   const songs = await Promise.all(
     (data || []).map(async (item) => {
-      const lyricsKey = item.storage_key.replace(/\.mp3$/, "-lyrics.txt");
+      const lyricsKey = item.storage_key.replace(/\.[a-z0-9]+$/i, "-lyrics.txt");
       const [{ data: signed }, { data: signedLyrics }] = await Promise.all([
         admin.storage.from("songs").createSignedUrl(item.storage_key, 3600),
         admin.storage.from("songs").createSignedUrl(lyricsKey, 3600),
@@ -73,8 +73,14 @@ export async function POST(request: NextRequest) {
   const mode = String(form.get("mode") || "vocals");
   if (!(["vocals", "instrumental"] as string[]).includes(mode)) return NextResponse.json({ error: "Invalid song mode." }, { status: 400 });
   const duration = Math.min(300, Math.max(1, Number(form.get("duration")) || 30));
-  const storageKey = `${user.id}/${id}.mp3`;
-  const contentType = file.type === "audio/wav" ? "audio/wav" : file.type === "audio/mp4" ? "audio/mp4" : "audio/mpeg";
+  const audioType = file.type.toLowerCase();
+  const audioExtension = audioType === "audio/wav" || audioType === "audio/x-wav"
+    ? "wav"
+    : audioType === "audio/mp4" || audioType === "audio/x-m4a"
+      ? "m4a"
+      : "mp3";
+  const contentType = audioExtension === "wav" ? "audio/wav" : audioExtension === "m4a" ? "audio/mp4" : "audio/mpeg";
+  const storageKey = `${user.id}/${id}.${audioExtension}`;
   const { error: uploadError } = await admin.storage
     .from("songs")
     .upload(storageKey, file, { contentType, upsert: true });

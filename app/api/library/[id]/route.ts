@@ -27,7 +27,7 @@ export async function DELETE(
     .from("songs")
     .remove([
       data.storage_key,
-      data.storage_key.replace(/\.mp3$/, "-lyrics.txt"),
+      data.storage_key.replace(/\.[a-z0-9]+$/i, "-lyrics.txt"),
     ]);
   if (storageError)
     return NextResponse.json({ error: "Cloud audio could not be removed. Nothing was deleted; please try again." }, { status: 500 });

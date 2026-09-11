@@ -251,7 +251,7 @@ No Supabase migration or new environment variable is required. Deploy normally. 
 - Includes every v18.8.43 billing/account/Owner Console correction plus diagnostic-label and fallback-classification polish.
 
 
-## v18.8.46 reliability hardening
+## v18.8.47 reliability hardening
 
 - Website-only creation no longer requires a separate typed prompt; pasted HTTPS links become a safe generic song brief before source extraction.
 - Webpage redirects are followed only through revalidated public HTTPS hosts, with a bounded redirect count and stronger IPv4-mapped IPv6 private-address blocking.

@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type Contribution = {
   id: number;
@@ -22,16 +22,6 @@ export default function ContributionClient({ token }: { token: string }) {
   const [loading,setLoading]=useState(true);
   const [title,setTitle]=useState("Group Song");
   const [contributions,setContributions]=useState<Contribution[]>([]);
-  const voterToken = useMemo(() => {
-    if (typeof window === "undefined") return "";
-    const key = `cantoa-group-voter-${token}`;
-    const existing = localStorage.getItem(key);
-    if (existing) return existing;
-    const created = crypto.randomUUID();
-    localStorage.setItem(key, created);
-    return created;
-  }, [token]);
-
   const refresh = useCallback(async()=>{
     try {
       const r=await fetch(`/api/contribute/${token}`,{cache:"no-store"});
@@ -66,9 +56,8 @@ export default function ContributionClient({ token }: { token: string }) {
   };
 
   const vote=async(id:number)=>{
-    if(!voterToken) return;
     try{
-      const r=await fetch(`/api/contribute/${token}/vote`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contributionId:id,voterToken})});
+      const r=await fetch(`/api/contribute/${token}/vote`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({contributionId:id})});
       const d=await r.json().catch(()=>({}));
       if(!r.ok) throw new Error(d.error||"Could not save your vote.");
       setStatus(d.removed?"Vote removed.":"Vote added.");

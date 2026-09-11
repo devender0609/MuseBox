@@ -28,7 +28,7 @@ export default async function SharedSong({ params }: { params: Promise<{ token: 
     .maybeSingle();
   const unlockAt = drop?.unlock_at ? new Date(drop.unlock_at).getTime() : null;
   const locked = Boolean(unlockAt && unlockAt > Date.now());
-  const lyricsKey = song.storage_key.replace(/\.mp3$/, "-lyrics.txt");
+  const lyricsKey = song.storage_key.replace(/\.[a-z0-9]+$/i, "-lyrics.txt");
   let audio: { signedUrl?: string } | null = null;
   let lyricLink: { signedUrl?: string } | null = null;
   if (!locked) {
