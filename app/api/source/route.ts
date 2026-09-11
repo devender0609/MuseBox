@@ -22,16 +22,22 @@ async function assertPublicHost(hostname: string) {
   if (!addresses.length || addresses.some((item) => privateIp(item.address))) throw new Error("PRIVATE_HOST");
 }
 
+function assertSafePort(url: URL) {
+  if (url.port && url.port !== "443") throw new Error("UNSAFE_PORT");
+}
+
 async function fetchPublicPage(start: URL) {
   let current = start;
   for (let hop = 0; hop < 4; hop += 1) {
+    assertSafePort(current);
     await assertPublicHost(current.hostname);
-    const response = await fetch(current, { redirect: "manual", headers: { "User-Agent": "Cantoa/1.0 song-source reader", Accept: "text/html,text/plain" } });
+    const response = await fetch(current, { redirect: "manual", signal: AbortSignal.timeout(8000), headers: { "User-Agent": "Cantoa/1.0 song-source reader", Accept: "text/html,text/plain" } });
     if ([301,302,303,307,308].includes(response.status)) {
       const location = response.headers.get("location");
       if (!location) return response;
       const next = new URL(location, current);
       if (next.protocol !== "https:" || next.username || next.password) throw new Error("PRIVATE_HOST");
+      assertSafePort(next);
       current = next;
       continue;
     }
@@ -65,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
     const value = String((await request.json()).url || "").trim();
     const url = new URL(value);
-    if (url.protocol !== "https:" || url.username || url.password) return NextResponse.json({ error: "Enter a public HTTPS webpage." }, { status: 400 });
+    if (url.protocol !== "https:" || url.username || url.password || (url.port && url.port !== "443")) return NextResponse.json({ error: "Enter a public HTTPS webpage using the standard HTTPS port." }, { status: 400 });
     const response = await fetchPublicPage(url);
     if (!response.ok) return NextResponse.json({ error: "This webpage could not be read. Paste its text instead." }, { status: 422 });
     const type = response.headers.get("content-type") || "";
@@ -80,6 +86,8 @@ export async function POST(request: NextRequest) {
     if (code === "PRIVATE_HOST") return NextResponse.json({ error: "Private or local network addresses cannot be used as webpage sources." }, { status: 400 });
     if (code === "TOO_LARGE") return NextResponse.json({ error: "This webpage is too large to import safely. Paste the relevant text instead." }, { status: 413 });
     if (code === "TOO_MANY_REDIRECTS") return NextResponse.json({ error: "This webpage redirects too many times. Paste the relevant text instead." }, { status: 422 });
+    if (code === "UNSAFE_PORT") return NextResponse.json({ error: "For safety, webpage import supports standard HTTPS links only." }, { status: 400 });
+    if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) return NextResponse.json({ error: "This webpage took too long to respond. Paste the relevant text instead." }, { status: 408 });
     return NextResponse.json({ error: "Enter a valid public HTTPS webpage." }, { status: 400 });
   }
 }

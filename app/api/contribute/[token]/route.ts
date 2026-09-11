@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase";
-import { checkRateLimit, requestFingerprint } from "@/lib/rate-limit";
+import { checkPublicRateLimit } from "@/lib/rate-limit";
 
 const allowedKinds = new Set(["memory","message","idea"]);
 const allowedPhotoTypes = new Set(["image/jpeg","image/png","image/webp"]);
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const admin = adminSupabase();
   if (!admin) return NextResponse.json({ error: "Contributions are not configured." }, { status: 503 });
   const { token } = await params;
-  const limiter = checkRateLimit(`group-contribution:${token}:${requestFingerprint(request)}`, 8, 10 * 60 * 1000);
+  const limiter = await checkPublicRateLimit(request, `group-contribution:${token}`, 8, 10 * 60);
   if (!limiter.ok) return NextResponse.json({ error: "Too many contributions were sent from this device. Please wait a few minutes and try again." }, { status: 429, headers: { "Retry-After": String(limiter.retryAfterSeconds) } });
   const contentType = request.headers.get("content-type") || "";
   let contributor = "Someone", memory = "", feeling = "", kind = "memory";

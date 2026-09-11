@@ -15,7 +15,11 @@ async function generationAccount(request: Request) {
     .select("plan,status,minutes_remaining,free_song_claimed,free_songs_remaining")
     .eq("user_id", user.id)
     .maybeSingle();
-  if (error || !data || data.status !== "active") throw new Error("USAGE_NOT_CONFIGURED");
+  if (error || !data) throw new Error("USAGE_NOT_CONFIGURED");
+  if (data.status !== "active") {
+    if (["past_due", "unpaid", "incomplete", "incomplete_expired", "paused"].includes(String(data.status || ""))) throw new Error("PAYMENT_ATTENTION_REQUIRED");
+    throw new Error("USAGE_NOT_CONFIGURED");
+  }
   return { user, owner: false, admin, membership: data };
 }
 
@@ -102,5 +106,7 @@ export function usageError(error: unknown) {
     return { error: "This is a Creator or Studio feature. Choose a membership to use it.", status: 402 };
   if (code === "RATE_LIMITED")
     return { error: "Too many requests were made in a short period. Please wait and try again.", status: 429 };
+  if (code === "PAYMENT_ATTENTION_REQUIRED")
+    return { error: "Your paid membership needs billing attention before more provider-backed features can run. Open Manage membership to update payment or subscription details.", status: 402 };
   return { error: "Membership usage is not configured. Run the supplied Supabase setup before accepting customers.", status: 503 };
 }

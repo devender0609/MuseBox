@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase";
+import { checkPublicRateLimit } from "@/lib/rate-limit";
 
 const ALLOWED = new Set(["love", "wow", "moved", "celebrate"]);
 
@@ -27,6 +28,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const admin = adminSupabase();
   if (!admin) return NextResponse.json({ error: "Gift reactions are unavailable." }, { status: 503 });
   const { token } = await params;
+  const limiter = await checkPublicRateLimit(request, `gift-reaction:${token}`, 20, 10 * 60);
+  if (!limiter.ok) return NextResponse.json({ error: "Too many reactions were sent from this device. Please wait a few minutes and try again." }, { status: 429, headers: { "Retry-After": String(limiter.retryAfterSeconds) } });
   const body = await request.json().catch(() => ({}));
   const reaction = String(body.reaction || "");
   if (!ALLOWED.has(reaction)) return NextResponse.json({ error: "Choose a valid reaction." }, { status: 400 });

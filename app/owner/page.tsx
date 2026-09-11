@@ -98,7 +98,7 @@ type Analytics = {
     recent24hP95LatencyMs: number | null;
     note: string;
   };
-  paidMembers: Array<{ email: string; plan: "Creator" | "Studio"; currency: "USD" | "INR"; amountMinor: number; amount: number; minutesRemaining: number; regionalMarket: string }>;
+  paidMembers: Array<{ email: string; plan: "Creator" | "Studio"; currency: "USD" | "INR"; amountMinor: number; amount: number; minutesRemaining: number; regionalMarket: string; billingCountry: string | null }>;
   billingConfig: { stripeSecretConfigured: boolean; creatorUsdConfigured: boolean; studioUsdConfigured: boolean; creatorInrConfigured: boolean; studioInrConfigured: boolean };
   alerts: Array<{ level: "info" | "warning"; state: "current" | "historical" | "info"; message: string }>;
   fallbackReasons: Array<{ reason: string; count: number }>;
@@ -217,17 +217,18 @@ export default function OwnerConsole() {
 
 
         <section className="owner-panel">
-          <div className="owner-panel-head"><div><p>PAID MEMBERS</p><h2>Who is paying, by plan and currency</h2></div><small>Currency reflects the Stripe regional price recorded for the active subscription. INR identifies India regional pricing; it is not a guess from email or profile location.</small></div>
+          <div className="owner-panel-head"><div><p>PAID MEMBERS</p><h2>Who is paying, by plan and currency</h2></div><small>Currency reflects the Stripe price actually recorded for the subscription. Billing country is shown only when Stripe supplied it; regional price and country are kept separate.</small></div>
           <div className="owner-table-wrap">
             <table className="owner-table">
-              <thead><tr><th>Customer</th><th>Plan</th><th>Price</th><th>Currency / market</th><th>Minutes left</th></tr></thead>
+              <thead><tr><th>Customer</th><th>Plan</th><th>Price</th><th>Currency / market</th><th>Billing country</th><th>Minutes left</th></tr></thead>
               <tbody>{analytics.paidMembers.length ? analytics.paidMembers.map((member) => <tr key={`${member.email}-${member.plan}-${member.currency}`}>
                 <td><b>{member.email}</b></td>
                 <td>{member.plan}</td>
                 <td>{member.currency === "INR" ? rupees(member.amount) : money(member.amount)}</td>
                 <td><b>{member.currency}</b><small>{member.regionalMarket}</small></td>
+                <td>{member.billingCountry || "Not provided"}</td>
                 <td>{Number.isFinite(member.minutesRemaining) ? member.minutesRemaining.toFixed(1).replace(/\.0$/, "") : "—"}</td>
-              </tr>) : <tr><td colSpan={5}>No active Creator or Studio memberships are currently recorded.</td></tr>}</tbody>
+              </tr>) : <tr><td colSpan={6}>No active Creator or Studio memberships are currently recorded.</td></tr>}</tbody>
             </table>
           </div>
         </section>

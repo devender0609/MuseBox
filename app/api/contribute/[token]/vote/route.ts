@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase } from "@/lib/supabase";
-import { checkRateLimit, requestFingerprint } from "@/lib/rate-limit";
+import { checkPublicRateLimit } from "@/lib/rate-limit";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
   const admin = adminSupabase();
@@ -9,7 +9,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const body = await request.json().catch(() => ({}));
   const contributionId = Number(body.contributionId);
   if (!Number.isFinite(contributionId)) return NextResponse.json({ error: "Invalid vote." }, { status: 400 });
-  const limiter = checkRateLimit(`group-vote:${token}:${requestFingerprint(request)}`, 30, 10 * 60 * 1000);
+  const limiter = await checkPublicRateLimit(request, `group-vote:${token}`, 30, 10 * 60);
   if (!limiter.ok) return NextResponse.json({ error: "Too many vote changes were sent from this device. Please wait a few minutes and try again." }, { status: 429, headers: { "Retry-After": String(limiter.retryAfterSeconds) } });
   const cookieName = "cantoa_group_voter";
   const existingCookie = request.cookies.get(cookieName)?.value || "";

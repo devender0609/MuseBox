@@ -1,6 +1,6 @@
 {
   "name": "cantoa-ai-music-studio",
-  "version": "0.18.8.48",
+  "version": "0.18.8.49",
   "private": true,
   "engines": {
     "node": "22.x"

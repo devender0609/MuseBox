@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authenticatedUser, adminSupabase } from "@/lib/supabase";
 import { isCantoaOwner } from "@/lib/owner";
+import { enforceRateLimit, usageError } from "@/lib/usage";
 
 type VoiceProfile = { id: string; voiceId: string; name: string; createdAt: number; provider: "elevenlabs"; };
 
@@ -30,6 +31,10 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   const ent = await entitlement(user.id, user.email);
   if (!ent.allowed) return NextResponse.json({ error: "My Voice requires Creator or Studio." }, { status: 402 });
+  if (ent.plan !== "Owner") {
+    try { await enforceRateLimit(request, "my_voice_create", 5, 24 * 60 * 60); }
+    catch (error) { const issue = usageError(error); return NextResponse.json({ error: issue.error }, { status: issue.status }); }
+  }
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) return NextResponse.json({ error: "Voice provider is not configured." }, { status: 503 });
   const form = await request.formData();
@@ -71,7 +76,15 @@ export async function POST(request: Request) {
   const profile: VoiceProfile = { id: `voice-${Date.now()}`, voiceId: data.voice_id, name: requested, createdAt: Date.now(), provider: "elevenlabs" };
   const next = [profile, ...existing].slice(0, ent.limit);
   const admin = adminSupabase();
-  if (admin) await admin.auth.admin.updateUserById(user.id, { user_metadata: { ...(user.user_metadata || {}), cantoa_my_voices: next } });
+  if (!admin) {
+    await fetch(`https://api.elevenlabs.io/v1/voices/${encodeURIComponent(data.voice_id)}`, { method: "DELETE", headers: { "xi-api-key": key } }).catch(() => undefined);
+    return NextResponse.json({ error: "Cantoa could not save this voice profile, so the provider copy was cleaned up. Please try again." }, { status: 503 });
+  }
+  const { error: metadataError } = await admin.auth.admin.updateUserById(user.id, { user_metadata: { ...(user.user_metadata || {}), cantoa_my_voices: next } });
+  if (metadataError) {
+    await fetch(`https://api.elevenlabs.io/v1/voices/${encodeURIComponent(data.voice_id)}`, { method: "DELETE", headers: { "xi-api-key": key } }).catch(() => undefined);
+    return NextResponse.json({ error: "Cantoa could not save this voice profile, so the provider copy was cleaned up. Please try again." }, { status: 500 });
+  }
   return NextResponse.json({ profile, profiles: next, limit: ent.limit, requiresVerification: Boolean(data.requires_verification) });
 }
 
@@ -90,6 +103,8 @@ export async function DELETE(request: Request) {
   }
   const next = profiles.filter((x) => x.id !== id);
   const admin = adminSupabase();
-  if (admin) await admin.auth.admin.updateUserById(user.id, { user_metadata: { ...(user.user_metadata || {}), cantoa_my_voices: next } });
+  if (!admin) return NextResponse.json({ error: "The provider voice was removed, but Cantoa could not update your saved profile list. Refresh later to retry cleanup." }, { status: 503 });
+  const { error: metadataError } = await admin.auth.admin.updateUserById(user.id, { user_metadata: { ...(user.user_metadata || {}), cantoa_my_voices: next } });
+  if (metadataError) return NextResponse.json({ error: "The provider voice was removed, but Cantoa could not update your saved profile list. Refresh later to retry cleanup." }, { status: 500 });
   return NextResponse.json({ profiles: next });
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import Stripe from "stripe";
 import { adminSupabase } from "@/lib/supabase";
 import { ownerUser } from "@/lib/owner-access";
 import { availableMusicProviders } from "@/lib/music-providers";
@@ -58,14 +59,25 @@ export async function GET(request: NextRequest) {
   const daysParam = Number(request.nextUrl.searchParams.get("days") || 30);
   const periodDays = [1, 7, 30].includes(daysParam) ? daysParam : 30;
   const since = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000).toISOString();
-  const [eventsResult, membershipsResult] = await Promise.all([
+  const [eventsResult, initialMembershipsResult] = await Promise.all([
     admin.from("generation_events")
       .select("id,user_email,plan,request_type,provider,preferred_provider,attempted_providers,fallback_used,requested_seconds,charged_minutes,estimated_cost_usd,cost_basis,latency_ms,status,error_code,request_summary,created_at")
       .gte("created_at", since).order("created_at", { ascending: false }).limit(2000),
     admin.from("memberships")
-      .select("email,plan,status,minutes_remaining,billing_currency,billing_amount_minor")
+      .select("email,plan,status,minutes_remaining,billing_currency,billing_amount_minor,billing_country,stripe_customer_id")
       .eq("status", "active").limit(5000),
   ]);
+  let membershipsResult = initialMembershipsResult;
+  // Keep Owner Console usable before the optional v18.8.49 country column is
+  // installed; country will simply show as unavailable until the migration runs.
+  if (membershipsResult.error && /billing_country|schema cache/i.test(membershipsResult.error.message || "")) {
+    const legacy = await admin.from("memberships")
+      .select("email,plan,status,minutes_remaining,billing_currency,billing_amount_minor,stripe_customer_id")
+      .eq("status", "active").limit(5000);
+    membershipsResult = (legacy.error
+      ? legacy
+      : { ...legacy, data: (legacy.data || []).map((item) => ({ ...item, billing_country: null })) }) as typeof initialMembershipsResult;
+  }
 
   if (eventsResult.error) {
     const missing = /generation_events/i.test(eventsResult.error.message || "");
@@ -96,6 +108,21 @@ export async function GET(request: NextRequest) {
     return event;
   });
   const memberships = membershipsResult.data || [];
+  // Backfill billing country for existing paid members when Stripe already has it.
+  // This is owner-only and limited to a small number of missing rows per refresh.
+  const stripeSecret = process.env.STRIPE_SECRET_KEY;
+  if (stripeSecret) {
+    const stripe = new Stripe(stripeSecret);
+    const missingCountry = memberships.filter((item) => (item.plan === "Creator" || item.plan === "Studio") && !item.billing_country && item.stripe_customer_id).slice(0, 25);
+    await Promise.all(missingCountry.map(async (item) => {
+      const customer = await stripe.customers.retrieve(String(item.stripe_customer_id)).catch(() => null);
+      if (!customer || customer.deleted) return;
+      const country = customer.address?.country || customer.shipping?.address?.country || null;
+      if (!country) return;
+      item.billing_country = country;
+      await admin.from("memberships").update({ billing_country: country, updated_at: Date.now() }).eq("stripe_customer_id", item.stripe_customer_id);
+    }));
+  }
   const successful = events.filter((event) => event.status === "success");
   const failed = events.filter((event) => event.status !== "success");
   const fallbackEvents = successful.filter((event) => event.fallback_used);
@@ -159,6 +186,7 @@ export async function GET(request: NextRequest) {
         amount: Number((amountMinor / 100).toFixed(2)),
         minutesRemaining: Number(item.minutes_remaining ?? 0),
         regionalMarket: currency === "inr" ? "India regional price" : "US/global price",
+        billingCountry: String(item.billing_country || "").toUpperCase() || null,
       };
     })
     .sort((a, b) => a.currency.localeCompare(b.currency) || a.plan.localeCompare(b.plan) || a.email.localeCompare(b.email));

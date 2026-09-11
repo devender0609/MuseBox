@@ -74,6 +74,8 @@ export async function POST(request: NextRequest) {
   if (!(["vocals", "instrumental"] as string[]).includes(mode)) return NextResponse.json({ error: "Invalid song mode." }, { status: 400 });
   const duration = Math.min(300, Math.max(1, Number(form.get("duration")) || 30));
   const audioType = file.type.toLowerCase();
+  const supportedAudioTypes = new Set(["audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/mp4", "audio/x-m4a", "audio/m4a"]);
+  if (!supportedAudioTypes.has(audioType)) return NextResponse.json({ error: "Unsupported audio format. Save MP3, WAV or M4A audio only." }, { status: 415 });
   const audioExtension = audioType === "audio/wav" || audioType === "audio/x-wav"
     ? "wav"
     : audioType === "audio/mp4" || audioType === "audio/x-m4a"

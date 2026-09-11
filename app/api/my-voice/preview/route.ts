@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import { authenticatedUser } from "@/lib/supabase";
+import { enforceRateLimit, ensurePremiumAccess, usageError } from "@/lib/usage";
 
 export async function POST(request: Request) {
   const user = await authenticatedUser(request);
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  try { await ensurePremiumAccess(request); await enforceRateLimit(request, "my_voice_preview", 30, 60 * 60); }
+  catch (error) { const issue = usageError(error); return NextResponse.json({ error: issue.error }, { status: issue.status }); }
   const body = await request.json().catch(() => ({}));
   const id = String(body.id || "");
   const text = String(body.text || "This is my Cantoa voice, ready for a personal spoken message.").trim().slice(0, 300);
