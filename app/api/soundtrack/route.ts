@@ -24,9 +24,11 @@ export async function POST(request:NextRequest){
     const incoming=await request.formData();
     const file=incoming.get("file");const prompt=String(incoming.get("prompt")||"").trim();requestSummary=prompt;
     if(!(file instanceof File)||file.size===0)return NextResponse.json({error:"Attach a video or image to score."},{status:400});
-    const isVideo=file.type.startsWith("video/");
-    const isImage=file.type.startsWith("image/");
-    if(!isVideo&&!isImage)return NextResponse.json({error:"Soundtrack scoring accepts an image or video file."},{status:415});
+    const videoTypes=new Set(["video/mp4","video/webm","video/quicktime"]);
+    const imageTypes=new Set(["image/jpeg","image/png","image/webp"]);
+    const isVideo=videoTypes.has(file.type.toLowerCase());
+    const isImage=imageTypes.has(file.type.toLowerCase());
+    if(!isVideo&&!isImage)return NextResponse.json({error:"Soundtrack scoring accepts JPG, PNG, WebP, MP4, WebM or MOV files."},{status:415});
     if(prompt.length<8)return NextResponse.json({error:"Describe the soundtrack you want."},{status:400});
     requestType=isVideo?"video_soundtrack":"image_soundtrack";const limit=isVideo?100*1024*1024:50*1024*1024;
     if(file.size>limit)return NextResponse.json({error:`Keep ${isVideo?"video":"image"} uploads under ${isVideo?"100":"50"} MB.`},{status:413});

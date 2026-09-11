@@ -978,8 +978,14 @@ export default function Home() {
   const [starterSeedPrompt, setStarterSeedPrompt] = useState<string | null>(null);
   type StarterOverrideField = "style" | "emotion" | "language" | "mode" | "duration";
   const starterOverridesRef = useRef<Set<StarterOverrideField>>(new Set());
+  const sourceAutoInstrumentalRef = useRef(false);
   const markStarterOverride = (field: StarterOverrideField) => {
     if (starterSeedPrompt) starterOverridesRef.current.add(field);
+  };
+  const clearAutoSourceMode = () => {
+    if (!sourceAutoInstrumentalRef.current) return;
+    sourceAutoInstrumentalRef.current = false;
+    setMode("vocals");
   };
   const [smartDirection, setSmartDirection] = useState<"heartfelt" | "cinematic" | "fun" | null>(null);
   type SourcePanel = "story" | "website" | "photo" | "video";
@@ -991,7 +997,6 @@ export default function Home() {
   const [exportOpen, setExportOpen] = useState(false);
   const [singAlongOpen, setSingAlongOpen] = useState(false);
   const [playbackTime, setPlaybackTime] = useState(0);
-  const [backingTrackBlob, setBackingTrackBlob] = useState<Blob | null>(null);
   const [backingTrackStatus, setBackingTrackStatus] = useState<"idle" | "building" | "ready" | "error">("idle");
   const [karaokeBuilding, setKaraokeBuilding] = useState(false);
   const [instrumentalBuilding, setInstrumentalBuilding] = useState(false);
@@ -1126,7 +1131,6 @@ export default function Home() {
   const [socialVideoSupported, setSocialVideoSupported] = useState(false);
   const [memoryPhotos, setMemoryPhotos] = useState<File[]>([]);
   const [videoSourceFile, setVideoSourceFile] = useState<File | null>(null);
-  const [memoryPhotoUrls, setMemoryPhotoUrls] = useState<string[]>([]);
   const [memoryMovieRendering, setMemoryMovieRendering] = useState(false);
   const [memoryMovieUrl, setMemoryMovieUrl] = useState("");
   const [memoryMovieBlob, setMemoryMovieBlob] = useState<Blob | null>(null);
@@ -1471,12 +1475,6 @@ export default function Home() {
   const showExportBranding = true;
 
   useEffect(() => {
-    const urls = memoryPhotos.map((file) => URL.createObjectURL(file));
-    setMemoryPhotoUrls(urls);
-    return () => urls.forEach((url) => URL.revokeObjectURL(url));
-  }, [memoryPhotos]);
-
-  useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
     const staleAuthKeys = ["error", "error_code", "error_description"];
@@ -1732,24 +1730,6 @@ export default function Home() {
     requestAnimationFrame(() => document.getElementById("idea")?.focus());
   };
 
-  const transcribeStoryFile = async (file: File) => {
-    if (!session) { setAccountOpen(true); setMessage("Sign in to turn a voice memo into a song."); return; }
-    setTranscribing(true); setMessage("Listening to your voice memo…");
-    try {
-      const form = new FormData(); form.append("file", file);
-      const response = await fetch("/api/transcribe", { method: "POST", headers: { Authorization: `Bearer ${session.access_token}` }, body: form });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Voice memo transcription failed.");
-      const text = String(data.text || "").trim();
-      if (!text) throw new Error("No clear speech was found in that voice memo.");
-      setStarterSeedPrompt(null);
-      setPrompt(`Turn this spoken story into an original song. Keep the emotional meaning and important details, but write natural singable lyrics instead of copying speech word-for-word. Story: ${text}`);
-      setSourceKind("idea"); setSourceMode(false); setDerivedContext("");
-      setMessage(`Voice memo understood${data.language ? ` · detected ${String(data.language).toUpperCase()}` : ""}. Review the brief before creating.`);
-    } catch (error) { setMessage(error instanceof Error ? error.message : "Voice memo transcription failed."); }
-    finally { setTranscribing(false); }
-  };
-
   const clearSourcePanelState = (panel: SourcePanel | null) => {
     if (panel === "website") { setSourceKind("idea"); setSourceUrl(""); }
     if (panel === "photo") setVisualScoreFile(null);
@@ -1763,10 +1743,12 @@ export default function Home() {
     setStarterSeedPrompt(null);
     if (activeSourcePanel === panel) {
       clearSourcePanelState(panel);
+      clearAutoSourceMode();
       setActiveSourcePanel(null);
       return;
     }
     clearSourcePanelState(activeSourcePanel);
+    clearAutoSourceMode();
     setSourceFile(null);
     setSourceMode(false);
     setSourceText("");
@@ -1806,8 +1788,8 @@ export default function Home() {
     const asksVocals = /\b(vocals?|singer|singing|sung by|male voice|female voice|duet|with lyrics|lead vocal)\b/.test(lower);
     // Mixed requests such as “instrumental intro with a male singer” are vocal songs.
     // Explicit “no vocals” wording is the only hard override toward instrumental.
-    if (explicitlyNoVocals || (asksInstrumental && !asksVocals)) setMode("instrumental");
-    else if (asksVocals) setMode("vocals");
+    if (explicitlyNoVocals || (asksInstrumental && !asksVocals)) { sourceAutoInstrumentalRef.current = false; setMode("instrumental"); }
+    else if (asksVocals) { sourceAutoInstrumentalRef.current = false; setMode("vocals"); }
     if (/hindi[^\n,.]{0,50}(verse|verses)[^\n,.]{0,80}english[^\n,.]{0,40}(chorus|choruses)|(?:verse|verses)[^\n,.]{0,40}hindi[^\n,.]{0,80}(?:chorus|choruses)[^\n,.]{0,40}english/.test(lower)) {
       setLanguage("Hindi + English"); setSectionLanguages({ verse: "Hindi", chorus: "English", bridge: "Hindi + English" });
     } else if (/punjabi[^\n,.]{0,80}english/.test(lower)) {
@@ -2025,9 +2007,11 @@ export default function Home() {
       setMessage("Describe the song before creating previews.");
       return;
     }
-    if (sourceKind === "audio") {
+    if (sourceKind === "audio" || visualScoreFile || videoSourceFile) {
       setMessage(
-        "Direction previews are available for ideas, text and webpages. Audio references go directly to remix.",
+        sourceKind === "audio"
+          ? "Direction previews are available for ideas, text and webpages. Audio references go directly to remix."
+          : "Direction previews do not analyze attached photos or video. Create the complete soundtrack so Cantoa can use the media itself.",
       );
       return;
     }
@@ -2326,12 +2310,41 @@ export default function Home() {
     setStoryInterview({ story: "", vibe: "" });
     setPrompt("");
     setMomentId("anything");
+    setCreateMode("quick");
+    setRecipient("");
+    setPersonalDetails("");
+    setDedication("");
+    setMode("vocals");
+    setDuration(120);
+    setQuickLyricsOpen(false);
+    setCustom(false);
+    setStyle("Auto — follow my prompt");
+    setLanguage("Auto — follow my prompt");
+    setVoice("Auto — follow my prompt");
     setTitle("");
     setLyrics("");
+    setExclude("");
+    setQuality("release");
+    setFineTuneOpen(false);
+    setCreativeDirection("faithful");
+    setWeirdness(35);
+    setInfluence(75);
+    setOccasion("Personal story");
+    setEmotion("Uplifting");
+    setStructure("Verse · Chorus · Verse · Chorus · Bridge · Final chorus");
+    setPronunciation("");
+    setPronunciationStudioOpen(false);
+    setPronunciationEntries([{ id: "pron-1", target: "", reading: "", section: "All vocals" }]);
+    setSectionLanguageOpen(false);
+    setSectionLanguages({ verse: "", chorus: "", bridge: "" });
+    setSurpriseDirection("");
+    setPeopleMomentsOpen(false);
     setPublicShareUrl("");
     setDerivedContext("");
     setCloudStatus("");
     setCloudSaveFailed(false);
+    starterOverridesRef.current.clear();
+    sourceAutoInstrumentalRef.current = false;
     resetPerSongTools();
   };
   const download = () => {
@@ -2384,7 +2397,6 @@ export default function Home() {
     setAction("");
     setSingAlongOpen(false);
     setPlaybackTime(0);
-    setBackingTrackBlob(null);
     setBackingTrackStatus("idle");
     setKaraokeBuilding(false);
     setInstrumentalBuilding(false);
@@ -2423,6 +2435,15 @@ export default function Home() {
     setCreateMode("quick");
     setSourceMode(false);
     setSourceKind("idea");
+    setSourceFile(null);
+    setSourceText("");
+    setSourceUrl("");
+    setVisualScoreFile(null);
+    setVideoSourceFile(null);
+    setMemoryPhotos([]);
+    setTurnAnythingOpen(false);
+    setActiveSourcePanel(null);
+    sourceAutoInstrumentalRef.current = false;
     setPrompt(visibleBriefs[kind]);
     setTitle("");
     setLyrics("");
@@ -2487,6 +2508,8 @@ export default function Home() {
         return `${index + 1}. ${kindLabel} from ${item.contributor || "Someone"}: ${item.memory || ""}${extras ? ` (${extras})` : ""}`;
       }).join("\n");
       setView("create"); setCreateMode("quick"); setMomentId("family"); setSourceMode(false); setSourceKind("idea"); setTitle(""); setLyrics("");
+      setSourceFile(null); setSourceText(""); setSourceUrl(""); setVisualScoreFile(null); setVideoSourceFile(null); setMemoryPhotos([]); setTurnAnythingOpen(false); setActiveSourcePanel(null);
+      sourceAutoInstrumentalRef.current = false;
       setStarterSeedPrompt(null);
       setPrompt(`Group Song 2.0: weave these structured contributions into one coherent original song. Respect memories and messages, use song ideas selectively, and treat higher-voted ideas as stronger group signals without ignoring quieter voices. Use the listed feelings to shape the emotional arc. Do not list contributions mechanically or copy private details verbatim unless they naturally belong in lyrics.\n\n${lines}`);
       setMessage(`${contributions.length} Group Song contribution${contributions.length === 1 ? "" : "s"} loaded. Higher-voted ideas are prioritized while every contributor remains represented.`);
@@ -2951,7 +2974,6 @@ export default function Home() {
         sessionForSong.backingBlob = verified;
         backingTrackSourceRef.current = verified;
         backingTrackBlobRef.current = verified;
-        setBackingTrackBlob(verified);
         setBackingTrackStatus("ready");
         return verified;
       } catch (error) {
@@ -3052,6 +3074,14 @@ export default function Home() {
     setMode(song.mode === "instrumental" && song.generatedLyrics?.trim() ? "vocals" : song.mode);
     setDuration(song.duration);
     setLyrics(lyricsOverride ?? song.generatedLyrics ?? "");
+    setSourceText("");
+    setSourceUrl("");
+    setVisualScoreFile(null);
+    setVideoSourceFile(null);
+    setMemoryPhotos([]);
+    setTurnAnythingOpen(false);
+    setActiveSourcePanel(null);
+    sourceAutoInstrumentalRef.current = false;
     setSourceMode(true);
     setSourceKind("audio");
     const audioInfo = audioFileInfo(song.blob);
@@ -3986,7 +4016,7 @@ export default function Home() {
               <div className="cantoa-source-launcher">
                 <div className="cantoa-source-launcher-head">
                   <div><span>✨</span><span><b>Start with something real</b><small>Choose one. Only the selected tool opens.</small></span></div>
-                  <button type="button" onClick={() => { if (turnAnythingOpen) clearSourcePanelState(activeSourcePanel); setTurnAnythingOpen((open) => !open); setActiveSourcePanel(null); setMessage(""); }}>{turnAnythingOpen ? "Hide" : "Add something"}</button>
+                  <button type="button" onClick={() => { if (turnAnythingOpen) { clearSourcePanelState(activeSourcePanel); clearAutoSourceMode(); } setTurnAnythingOpen((open) => !open); setActiveSourcePanel(null); setMessage(""); }}>{turnAnythingOpen ? "Hide" : "Add something"}</button>
                 </div>
                 {turnAnythingOpen && <>
                   <div className="cantoa-source-grid">
@@ -4016,12 +4046,12 @@ export default function Home() {
 
                   {activeSourcePanel === "photo" && <div className="source-focus-panel">
                     <div className="source-focus-head"><span><b>Photo → music</b><small>Choose one image, then add any context in the main idea box.</small></span><button type="button" onClick={() => selectSourcePanel("photo")} aria-label="Close photo"><X /></button></div>
-                    <label className="source-focus-upload"><span>🖼️</span><b>{visualScoreFile ? visualScoreFile.name : "Choose photo or screenshot"}</b><small>JPG, PNG or WebP · For a text-message screenshot, paste the text in the main idea box for lyric-level understanding.</small><input type="file" accept="image/*" onChange={(e) => { const file=e.target.files?.[0]||null; setVisualScoreFile(file); if(file){ setVideoSourceFile(null); setMode("instrumental"); if (!prompt.trim()) setPrompt("Create a cinematic instrumental soundtrack inspired by this image; match its mood, energy and sense of occasion."); setMomentId("anything"); setMessage(""); } }} /></label>
+                    <label className="source-focus-upload"><span>🖼️</span><b>{visualScoreFile ? visualScoreFile.name : "Choose photo or screenshot"}</b><small>JPG, PNG or WebP · For a text-message screenshot, paste the text in the main idea box for lyric-level understanding.</small><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => { const file=e.target.files?.[0]||null; setVisualScoreFile(file); if(file){ setVideoSourceFile(null); sourceAutoInstrumentalRef.current = true; setMode("instrumental"); if (!prompt.trim()) setPrompt("Create a cinematic instrumental soundtrack inspired by this image; match its mood, energy and sense of occasion."); setMomentId("anything"); setMessage(""); } }} /></label>
                   </div>}
 
                   {activeSourcePanel === "video" && <div className="source-focus-panel">
                     <div className="source-focus-head"><span><b>Video → soundtrack</b><small>Choose a clip and Cantoa will use the existing video soundtrack flow.</small></span><button type="button" onClick={() => selectSourcePanel("video")} aria-label="Close video"><X /></button></div>
-                    <label className="source-focus-upload"><span>🎬</span><b>{videoSourceFile ? videoSourceFile.name : "Choose video"}</b><small>MP4, WebM or MOV</small><input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(e) => { const file=e.target.files?.[0]||null; setVideoSourceFile(file); if(file){ setVisualScoreFile(null); setMode("instrumental"); setMomentId("creator"); if (!prompt.trim()) setPrompt("Create music for this video that follows its mood, pacing and emotional arc."); setMessage(""); } }} /></label>
+                    <label className="source-focus-upload"><span>🎬</span><b>{videoSourceFile ? videoSourceFile.name : "Choose video"}</b><small>MP4, WebM or MOV</small><input type="file" accept="video/mp4,video/webm,video/quicktime" onChange={(e) => { const file=e.target.files?.[0]||null; setVideoSourceFile(file); if(file){ setVisualScoreFile(null); sourceAutoInstrumentalRef.current = true; setMode("instrumental"); setMomentId("creator"); if (!prompt.trim()) setPrompt("Create music for this video that follows its mood, pacing and emotional arc."); setMessage(""); } }} /></label>
                   </div>}
                 </>}
               </div>
@@ -4070,7 +4100,7 @@ export default function Home() {
                 </button>
                 <label className={`memory-attach ${memoryPhotos.length || visualScoreFile || videoSourceFile || (sourceMode && sourceFile) ? "has-files" : ""}`} title="Add photos, video or audio. Cantoa will detect what you attached.">
                   <Paperclip /><b>{sourceMode && sourceFile ? `Audio attached · ${sourceFile.name}` : videoSourceFile ? `Video attached${memoryPhotos.length ? ` · ${memoryPhotos.length} photos` : ""}` : visualScoreFile ? `Image attached · ${visualScoreFile.name}` : memoryPhotos.length ? `${memoryPhotos.length} photo${memoryPhotos.length === 1 ? "" : "s"}` : "Add media"}</b>
-                  <input type="file" accept="image/*,audio/*,video/mp4,video/webm,video/quicktime" multiple onChange={(e) => {
+                  <input type="file" accept="image/jpeg,image/png,image/webp,audio/*,video/mp4,video/webm,video/quicktime" multiple onChange={(e) => {
                     const files = Array.from(e.target.files || []) as File[];
                     const images = files.filter((file) => file.type.startsWith("image/")).slice(0, 20);
                     const video = files.find((file) => file.type.startsWith("video/")) || null;
@@ -4080,6 +4110,7 @@ export default function Home() {
                     setSourceUrl("");
                     setVisualScoreFile(null);
                     if (audio) {
+                      clearAutoSourceMode();
                       setMemoryPhotos([]);
                       setVideoSourceFile(null);
                       setSourceFile(audio);
@@ -4092,8 +4123,13 @@ export default function Home() {
                       setSourceFile(null);
                       setSourceKind("idea");
                       setSourceMode(false);
-                      setMessage(files.length > 1 ? "Video selected as the primary source. Add photos later for a Memory Movie." : "Video attached. Describe how the music should follow the moment.");
+                      sourceAutoInstrumentalRef.current = true;
+                      setMode("instrumental");
+                      setMomentId("creator");
+                      if (!prompt.trim()) setPrompt("Create music for this video that follows its mood, pacing and emotional arc.");
+                      setMessage(files.length > 1 ? "Video selected as the primary source. Other selected media were ignored; add photos later for a Memory Movie." : "Video attached. Cantoa will use the soundtrack flow; describe how the music should follow the moment.");
                     } else if (images.length) {
+                      clearAutoSourceMode();
                       setMemoryPhotos(images);
                       setVideoSourceFile(null);
                       setSourceFile(null);
@@ -4611,13 +4647,13 @@ export default function Home() {
                   <div className="segmented">
                     <button
                       className={mode === "vocals" ? "active" : ""}
-                      onClick={() => { markStarterOverride("mode"); setMode("vocals"); }}
+                      onClick={() => { markStarterOverride("mode"); sourceAutoInstrumentalRef.current = false; setMode("vocals"); }}
                     >
                       <Mic2 /> Vocals
                     </button>
                     <button
                       className={mode === "instrumental" ? "active" : ""}
-                      onClick={() => { markStarterOverride("mode"); setMode("instrumental"); }}
+                      onClick={() => { markStarterOverride("mode"); sourceAutoInstrumentalRef.current = false; setMode("instrumental"); }}
                     >
                       <Music2 /> Instrumental
                     </button>
@@ -4697,7 +4733,7 @@ export default function Home() {
                   generation minutes.
                 </p>
               </div>
-              {sourceKind !== "audio" && (
+              {sourceKind !== "audio" && !visualScoreFile && !videoSourceFile && (
                 <div className="preview-option">
                   <button
                     className="preview-button"

@@ -1,6 +1,6 @@
 {
   "name": "cantoa-ai-music-studio",
-  "version": "0.18.8.51",
+  "version": "0.18.8.52",
   "private": true,
   "engines": {
     "node": "22.x"
@@ -13,7 +13,7 @@
     "test": "npm run build && npm run test:current",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate",
-    "test:current": "node --test tests/cantoa-v18-8-51.test.mjs",
+    "test:current": "node --test tests/cantoa-v18-8-52.test.mjs",
     "test:historical": "node --test tests/*.test.mjs"
   },
   "dependencies": {

@@ -61,7 +61,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const ids = (data || []).map((item) => item.id);
   const voteCounts = new Map<number, number>();
   if (ids.length) {
-    const { data: votes } = await admin.from("moment_contribution_votes").select("contribution_id").in("contribution_id", ids);
+    const { data: votes, error: votesError } = await admin.from("moment_contribution_votes").select("contribution_id").in("contribution_id", ids);
+    if (votesError) return NextResponse.json({ error: "Group Song votes could not be refreshed right now." }, { status: 503 });
     for (const vote of votes || []) voteCounts.set(vote.contribution_id, (voteCounts.get(vote.contribution_id) || 0) + 1);
   }
   const contributions = (data || []).map((item) => ({ ...item, votes: voteCounts.get(item.id) || 0, hasPhoto: Boolean(item.photo_path) }));
