@@ -72,20 +72,20 @@ export default function ContributionClient({ token }: { token: string }) {
     <span>Add a memory, message or idea. You can also add one photo and vote on the ideas that feel most important.</span>
 
     <div className="group-kind-tabs" role="group" aria-label="Contribution type">
-      <button type="button" className={kind==="memory"?"active":""} onClick={()=>setKind("memory")}>Memory</button>
-      <button type="button" className={kind==="message"?"active":""} onClick={()=>setKind("message")}>Message</button>
-      <button type="button" className={kind==="idea"?"active":""} onClick={()=>setKind("idea")}>Song idea</button>
+      <button type="button" className={kind==="memory"?"active":""} aria-pressed={kind==="memory"} onClick={()=>setKind("memory")}>Memory</button>
+      <button type="button" className={kind==="message"?"active":""} aria-pressed={kind==="message"} onClick={()=>setKind("message")}>Message</button>
+      <button type="button" className={kind==="idea"?"active":""} aria-pressed={kind==="idea"} onClick={()=>setKind("idea")}>Song idea</button>
     </div>
     <label>Your name (optional)<input value={name} maxLength={80} onChange={e=>setName(e.target.value)} placeholder="First name or nickname" /></label>
     <label>{kind==="memory"?"Your memory":kind==="message"?"Your message":"Your song idea"}<textarea value={memory} maxLength={1200} onChange={e=>setMemory(e.target.value)} placeholder={kind==="memory"?"A favorite moment, inside detail, or story…":kind==="message"?"Something you want the person or group to hear…":"A lyric idea, theme, phrase, or detail worth including…"} /></label>
     <label>Feeling to leave behind (optional)<input value={feeling} maxLength={120} onChange={e=>setFeeling(e.target.value)} placeholder="e.g. grateful, joyful, proud, nostalgic" /></label>
     <label className="group-photo-label">Photo (optional)<input id="group-photo" type="file" accept="image/jpeg,image/png,image/webp" onChange={e=>setPhoto(e.target.files?.[0]||null)} /><small>One JPG, PNG or WebP up to 5 MB. Add a memory above so the creator knows why it matters.</small></label>
     <button className="group-submit" onClick={send} disabled={sending||memory.trim().length<3}>{sending?"Adding…":"Add to Group Song"}</button>
-    {status&&<small className="group-status">{status}</small>}
+    {status&&<small className="group-status" role="status" aria-live="polite">{status}</small>}
 
     <div className="group-ideas-head"><div><b>Shared ideas</b><small>{contributions.length?`${contributions.length} contribution${contributions.length===1?"":"s"}`:"Be the first to add one."}</small></div><button type="button" onClick={()=>void refresh()} disabled={loading}>{loading?"Loading…":"Refresh"}</button></div>
     {contributions.length>0&&<div className="group-contribution-list">{contributions.map(item=><article key={item.id}>
-      {item.photo_url&&<img src={item.photo_url} alt="Contribution" loading="lazy" />}
+      {item.photo_url&&<img src={item.photo_url} alt={`Photo shared by ${item.contributor||"a contributor"}`} loading="lazy" />}
       <div className="group-contribution-copy"><span className="group-kind-badge">{item.kind==="idea"?"SONG IDEA":item.kind.toUpperCase()}</span><b>{item.contributor||"Someone"}</b><p>{item.memory}</p>{item.feeling&&<small>Feeling: {item.feeling}</small>}</div>
       <button type="button" className="group-vote" onClick={()=>void vote(item.id)} aria-label={`Vote for contribution from ${item.contributor||"Someone"}`}>♡ <span>{item.votes||0}</span></button>
     </article>)}</div>}

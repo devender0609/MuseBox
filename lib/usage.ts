@@ -55,13 +55,16 @@ export async function reserveMinutes(request: Request, minutes: number) {
 }
 
 export async function refundMinutes(userId: string | null, minutes: number) {
-  if (!userId) return;
+  if (!userId || minutes <= 0) return true;
   const admin = adminSupabase();
-  if (admin)
-    await admin.rpc("refund_generation_minutes", {
-      p_user_id: userId,
-      p_minutes: minutes,
-    });
+  if (!admin) return false;
+  // Do not blindly retry this non-idempotent RPC: a network timeout can occur after
+  // PostgreSQL committed the refund, and a retry could over-credit the account.
+  const { error } = await admin.rpc("refund_generation_minutes", {
+    p_user_id: userId,
+    p_minutes: minutes,
+  });
+  return !error;
 }
 
 export async function ensurePremiumAccess(request: Request) {

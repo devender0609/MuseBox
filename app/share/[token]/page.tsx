@@ -14,18 +14,20 @@ export default async function SharedSong({ params }: { params: Promise<{ token: 
   const { token } = await params;
   const admin = adminSupabase();
   if (!admin) notFound();
-  const { data: song } = await admin!
+  const { data: song, error: songError } = await admin!
     .from("songs")
     .select("id,title,mode,duration,storage_key,version_label,created_at,gift_to,gift_from,dedication")
     .eq("share_token", token)
     .eq("public_share", true)
     .maybeSingle();
+  if (songError) throw new Error("SHARED_SONG_LOOKUP_UNAVAILABLE");
   if (!song) notFound();
-  const { data: drop } = await admin!
+  const { data: drop, error: dropError } = await admin!
     .from("song_drops")
     .select("unlock_at")
     .eq("song_id", song.id)
     .maybeSingle();
+  if (dropError) throw new Error("SHARED_SONG_DROP_LOOKUP_UNAVAILABLE");
   const unlockAt = drop?.unlock_at ? new Date(drop.unlock_at).getTime() : null;
   const locked = Boolean(unlockAt && unlockAt > Date.now());
   const lyricsKey = song.storage_key.replace(/\.[a-z0-9]+$/i, "-lyrics.txt");

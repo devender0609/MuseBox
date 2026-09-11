@@ -5,10 +5,10 @@ import { checkPublicRateLimit } from "@/lib/rate-limit";
 
 const ALLOWED = new Set(["love", "wow", "moved", "celebrate"]);
 
-function fingerprint(request: NextRequest) {
+function fingerprint(request: NextRequest, token: string) {
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
   const ua = request.headers.get("user-agent") || "unknown";
-  return createHash("sha256").update(`${forwarded}|${ua}|cantoa-gift-v1`).digest("hex").slice(0, 40);
+  return createHash("sha256").update(`${forwarded}|${ua}|${token}|cantoa-gift-v2`).digest("hex").slice(0, 40);
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (error) return NextResponse.json({ error: "Reactions are temporarily unavailable." }, { status: 500 });
   const counts = { love: 0, wow: 0, moved: 0, celebrate: 0 };
   for (const row of data || []) if (row.reaction in counts) counts[row.reaction as keyof typeof counts] += 1;
-  return NextResponse.json({ counts });
+  return NextResponse.json({ counts }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ token: string }> }) {
@@ -39,7 +39,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { data: song, error: songError } = await admin.from("songs").select("id").eq("share_token", token).eq("public_share", true).maybeSingle();
   if (songError) return NextResponse.json({ error: "Gift reactions are temporarily unavailable." }, { status: 500 });
   if (!song) return NextResponse.json({ error: "Gift page not found." }, { status: 404 });
-  const { error } = await admin.from("gift_reactions").upsert({ song_id: song.id, fingerprint: fingerprint(request), reaction }, { onConflict: "song_id,fingerprint" });
+  const { error } = await admin.from("gift_reactions").upsert({ song_id: song.id, fingerprint: fingerprint(request, token), reaction }, { onConflict: "song_id,fingerprint" });
   if (error) return NextResponse.json({ error: "Reaction could not be saved." }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

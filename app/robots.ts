@@ -5,7 +5,13 @@ export default function robots(): MetadataRoute.Robots {
     rules: {
       userAgent: "*",
       allow: "/",
-      disallow: ["/api/", "/share/"],
+      disallow: [
+        "/api/",
+        "/share/",
+        "/contribute/",
+        "/owner",
+        "/checkout-success",
+      ],
     },
     sitemap: "https://cantoamusic.com/sitemap.xml",
     host: "https://cantoamusic.com",

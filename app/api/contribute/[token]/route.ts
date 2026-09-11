@@ -25,7 +25,8 @@ async function contributionPayload(admin: NonNullable<ReturnType<typeof adminSup
   const ids = (data || []).map((item) => item.id);
   const voteCounts = new Map<number, number>();
   if (ids.length) {
-    const { data: votes } = await admin.from("moment_contribution_votes").select("contribution_id").in("contribution_id", ids);
+    const { data: votes, error: votesError } = await admin.from("moment_contribution_votes").select("contribution_id").in("contribution_id", ids);
+    if (votesError) throw votesError;
     for (const vote of votes || []) voteCounts.set(vote.contribution_id, (voteCounts.get(vote.contribution_id) || 0) + 1);
   }
   return Promise.all((data || []).map(async (item) => {
@@ -51,7 +52,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (songError) return NextResponse.json({ error: "Could not load the shared song right now." }, { status: 500 });
   try {
     const contributions = await contributionPayload(admin, collection.id);
-    return NextResponse.json({ title: song?.title || "Group Song", contributions });
+    return NextResponse.json({ title: song?.title || "Group Song", contributions }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
     return NextResponse.json({ error: "Could not load the shared ideas right now." }, { status: 500 });
   }

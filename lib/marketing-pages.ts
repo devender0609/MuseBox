@@ -75,7 +75,7 @@ export const MARKETING_PAGES: Record<string, MarketingPage> = {
     steps: [
       { title: "Remember", text: "Add the milestones and ordinary details that matter most." },
       { title: "Create", text: "Cantoa turns the story into an original song in the style you want." },
-      { title: "Surprise them", text: "Share the song privately or turn it into a polished gift experience." },
+      { title: "Surprise them", text: "Share it with an unlisted gift link or turn it into a polished gift experience." },
     ],
     closingTitle: "Because some memories deserve more than a caption.",
     closingText: "Give the story of your years together a melody of its own.",

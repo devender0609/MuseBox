@@ -3,6 +3,10 @@ import {enforceRateLimit,refundMinutes,reserveMinutes,usageError} from "@/lib/us
 export const maxDuration=300;
 export async function POST(request:NextRequest){
   let reservation:{userId:string|null;remaining:number|null}|null=null;let charged=0;
+  const failed = async (message:string,status=500) => {
+    const refundConfirmed=await refundMinutes(reservation?.userId||null,charged);
+    return NextResponse.json({error:refundConfirmed?message:`${message} Cantoa could not confirm the automatic minute restoration; check your balance before retrying.`,refundConfirmed},{status:refundConfirmed?status:503,headers:{"Cache-Control":"private, no-store"}});
+  };
   try{
     const key=process.env.ELEVENLABS_API_KEY;
     if(!key)return NextResponse.json({error:"Connect ELEVENLABS_API_KEY to remix uploaded audio."},{status:503});
@@ -14,15 +18,15 @@ export async function POST(request:NextRequest){
     charged=duration/60;try{await enforceRateLimit(request,"remix",8,3600);reservation=await reserveMinutes(request,charged)}catch(error){const issue=usageError(error);return NextResponse.json({error:issue.error},{status:issue.status})}
     const upload=new FormData();upload.append("file",file);upload.append("extract_composition_plan","music_v2");
     const uploaded=await fetch("https://api.elevenlabs.io/v1/music/upload",{method:"POST",headers:{"xi-api-key":key},body:upload});
-    if(!uploaded.ok){await refundMinutes(reservation?.userId||null,charged);return NextResponse.json({error:"The source audio could not be analyzed."},{status:uploaded.status})}
+    if(!uploaded.ok)return failed("The source audio could not be analyzed.",uploaded.status);
     const source=await uploaded.json();
-    if(!source.composition_plan){await refundMinutes(reservation?.userId||null,charged);return NextResponse.json({error:"No musical structure could be extracted from this audio."},{status:422})}
+    if(!source.composition_plan)return failed("No musical structure could be extracted from this audio.",422);
     const planned=await fetch("https://api.elevenlabs.io/v1/music/plan",{method:"POST",headers:{"Content-Type":"application/json","xi-api-key":key},body:JSON.stringify({prompt,source_composition_plan:source.composition_plan,music_length_ms:duration*1000,model_id:"music_v2"})});
-    if(!planned.ok){await refundMinutes(reservation?.userId||null,charged);return NextResponse.json({error:"The remix plan could not be created."},{status:planned.status})}
+    if(!planned.ok)return failed("The remix plan could not be created.",planned.status);
     const rawPlan=await planned.json();
     const composition_plan=rawPlan.composition_plan||rawPlan;
     const composed=await fetch("https://api.elevenlabs.io/v1/music?output_format=mp3_48000_192",{method:"POST",headers:{"Content-Type":"application/json","xi-api-key":key},body:JSON.stringify({composition_plan,model_id:"music_v2"})});
-    if(!composed.ok){await refundMinutes(reservation?.userId||null,charged);return NextResponse.json({error:"The remix could not be rendered."},{status:composed.status})}
+    if(!composed.ok)return failed("The remix could not be rendered.",composed.status);
     return new NextResponse(await composed.arrayBuffer(),{headers:{"Content-Type":"audio/mpeg","Cache-Control":"private, no-store","X-Cantoa-Minutes-Remaining":String(reservation?.remaining??"")}});
-  }catch(error){await refundMinutes(reservation?.userId||null,charged);return NextResponse.json({error:error instanceof Error?error.message:"Audio remix failed."},{status:500})}
+  }catch(error){return failed(error instanceof Error?error.message:"Audio remix failed.",500)}
 }

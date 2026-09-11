@@ -15,8 +15,8 @@ export function requestFingerprint(request: NextRequest) {
   return `${ip}:${ua.slice(0, 120)}`;
 }
 
-export function requestFingerprintHash(request: NextRequest) {
-  return createHash("sha256").update(`${requestFingerprint(request)}|cantoa-public-v1`).digest("hex");
+export function requestFingerprintHash(request: NextRequest, scope = "") {
+  return createHash("sha256").update(`${requestFingerprint(request)}|${scope}|cantoa-public-v2`).digest("hex");
 }
 
 export function checkRateLimit(key: string, limit: number, windowMs: number) {
@@ -40,12 +40,13 @@ export function checkRateLimit(key: string, limit: number, windowMs: number) {
  * rather than making gift/contribution links unusable.
  */
 export async function checkPublicRateLimit(request: NextRequest, action: string, limit: number, windowSeconds: number) {
-  const fingerprint = requestFingerprintHash(request);
+  const actionKey = createHash("sha256").update(`${action}|cantoa-action-v1`).digest("hex").slice(0, 40);
+  const fingerprint = requestFingerprintHash(request, actionKey);
   const admin = adminSupabase();
   if (admin) {
     const { data, error } = await admin.rpc("check_cantoa_public_rate_limit", {
       p_fingerprint: fingerprint,
-      p_action: action.slice(0, 80),
+      p_action: actionKey,
       p_limit: limit,
       p_window_seconds: windowSeconds,
     });
@@ -58,5 +59,5 @@ export async function checkPublicRateLimit(request: NextRequest, action: string,
       };
     }
   }
-  return checkRateLimit(`${action}:${fingerprint}`, limit, windowSeconds * 1000);
+  return checkRateLimit(`${actionKey}:${fingerprint}`, limit, windowSeconds * 1000);
 }

@@ -56,8 +56,9 @@ export async function POST(request:NextRequest){
     }
     throw new Error("Soundtrack generation timed out.");
   }catch(error){
-    await refundMinutes(reservation?.userId||null,charged);
-    await logGenerationEvent(request,{requestType,provider:null,preferredProvider:"mureka",attemptedProviders:attempted?["mureka"]:[],fallbackUsed:false,requestedSeconds:60,chargedMinutes:charged,latencyMs:Date.now()-started,status:"refunded",errorCode:error instanceof Error?error.message:"SOUNDTRACK_FAILED",requestSummary,plan:reservation?.plan||null});
-    return NextResponse.json({error:error instanceof Error?error.message:"Soundtrack generation failed."},{status:500});
+    const refundConfirmed=await refundMinutes(reservation?.userId||null,charged);
+    await logGenerationEvent(request,{requestType,provider:null,preferredProvider:"mureka",attemptedProviders:attempted?["mureka"]:[],fallbackUsed:false,requestedSeconds:60,chargedMinutes:charged,latencyMs:Date.now()-started,status:refundConfirmed?"refunded":"failed",errorCode:error instanceof Error?error.message:"SOUNDTRACK_FAILED",requestSummary,plan:reservation?.plan||null});
+    const base=error instanceof Error?error.message:"Soundtrack generation failed.";
+    return NextResponse.json({error:refundConfirmed?base:`${base} Cantoa could not confirm the automatic minute restoration; check your balance before retrying.`,refundConfirmed},{status:refundConfirmed?500:503,headers:{"Cache-Control":"private, no-store"}});
   }
 }

@@ -21,6 +21,7 @@ export default function GiftClient({ token, audioUrl, title, giftTo, giftFrom, d
   const reactionRecorder = useRef<MediaRecorder | null>(null);
   const reactionChunks = useRef<Blob[]>([]);
   useEffect(() => { if (!opened) return; fetch(`/api/share/${token}/reaction`).then((r) => r.ok ? r.json() : null).then((data) => data?.counts && setCounts(data.counts)).catch(() => undefined); }, [opened, token]);
+  useEffect(() => () => { if (reactionUrl) URL.revokeObjectURL(reactionUrl); }, [reactionUrl]);
 
   const toggleReactionRecording = async () => {
     if (reactionRecording) { reactionRecorder.current?.stop(); return; }
@@ -81,7 +82,7 @@ export default function GiftClient({ token, audioUrl, title, giftTo, giftFrom, d
     {dedication && <blockquote>{dedication}</blockquote>}
     {audioUrl ? <audio controls preload="metadata" src={audioUrl} /> : <p className="gift-audio-error">Audio is temporarily unavailable. Please try this gift link again later.</p>}
     <div className="gift-meta"><span>{mode === "vocals" ? "Vocals" : "Instrumental"}</span><span>{Math.ceil(duration / 60)} min</span><span>{version || "Original"}</span></div>
-    <div className="gift-reactions"><b>Send a reaction</b><div>{OPTIONS.map(([key, emoji, label]) => <button key={key} className={selected === key ? "selected" : ""} onClick={() => react(key)} aria-label={label}><span>{emoji}</span><small>{counts[key]}</small></button>)}</div></div>
+    <div className="gift-reactions"><b>Send a reaction</b><div>{OPTIONS.map(([key, emoji, label]) => <button key={key} className={selected === key ? "selected" : ""} onClick={() => react(key)} aria-label={label} aria-pressed={selected === key}><span>{emoji}</span><small>{counts[key]}</small></button>)}</div></div>
     <div className="gift-reaction-capture"><div><b>Capture your reaction</b><small>Optional · record up to 30 seconds. The video stays on this device unless you choose to share it. Cantoa branding is included on exported reactions.</small></div><button onClick={() => void toggleReactionRecording()}>{reactionRecording ? "Stop recording" : "Record reaction"}</button>{reactionError && <small className="gift-reaction-error" role="status">{reactionError}</small>}{reactionUrl && <><video controls playsInline src={reactionUrl} /><button className="gift-reaction-share" onClick={() => void shareReaction()}>Share or download reaction</button></>}</div>
     {lyrics && <details className="gift-lyrics"><summary>Read lyrics</summary><pre>{lyrics}</pre></details>}
     <div className="gift-cta"><p>Want to answer with a song?</p><a href={`/?moment=someone&reply=${token}`}>Send a song reply →</a><p>Know someone who deserves their own song?</p><a href="/?moment=someone">Make one for someone you love →</a></div>

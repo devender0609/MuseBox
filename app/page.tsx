@@ -1146,13 +1146,7 @@ export default function Home() {
   const [groupVoteCount, setGroupVoteCount] = useState(0);
   const [groupStatusLoading, setGroupStatusLoading] = useState(false);
   const [secretDropAt, setSecretDropAt] = useState("");
-  const [mySound, setMySound] = useState<MySoundProfile | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const raw = localStorage.getItem("cantoa-my-sound");
-      return raw ? (JSON.parse(raw) as MySoundProfile) : null;
-    } catch { return null; }
-  });
+  const [mySound, setMySound] = useState<MySoundProfile | null>(null);
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const recorder = useRef<MediaRecorder | null>(null);
@@ -1271,21 +1265,54 @@ export default function Home() {
     if (!session) {
       setSelectedPlan("Explore");
       setAccountInfo(null);
-      return;
+      return null;
     }
     try {
       const response = await fetch("/api/account", {
         headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: "no-store",
       });
-      if (!response.ok) return;
+      if (!response.ok) return null;
       const data = (await response.json()) as CantoaAccountInfo;
       setAccountInfo(data);
       if (data.plan) setSelectedPlan(data.plan);
-    } catch {}
+      return data;
+    } catch { return null; }
   }, [session]);
   useEffect(() => {
     queueMicrotask(() => void refreshAccount());
   }, [refreshAccount]);
+  useEffect(() => {
+    if (!sessionReady || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    const checkoutState = url.searchParams.get("checkout");
+    if (!checkoutState) return;
+    url.searchParams.delete("checkout");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    if (checkoutState === "cancelled") { setPlanMessage("Checkout was cancelled. No membership change was made."); return; }
+    if (checkoutState === "unverified") { setPlanMessage("Cantoa could not verify that checkout. Your membership was not changed by this page."); return; }
+    if (checkoutState !== "success" || !session) return;
+    let stopped = false;
+    const delays = [0, 1200, 3000, 6000];
+    const timers: number[] = [];
+    setPlanMessage("Payment confirmed. Updating your Cantoa membership…");
+    for (const delay of delays) {
+      const timer = window.setTimeout(async () => {
+        if (stopped) return;
+        const data = await refreshAccount();
+        if (stopped) return;
+        if (data && (data.plan === "Creator" || data.plan === "Studio" || data.plan === "Owner")) {
+          setPlanMessage(`${data.plan} membership is active.`);
+          stopped = true;
+          timers.forEach((id) => window.clearTimeout(id));
+        } else if (delay === delays[delays.length - 1]) {
+          setPlanMessage("Payment was confirmed, but membership activation is still syncing. Refresh in a moment if your plan has not updated yet.");
+        }
+      }, delay);
+      timers.push(timer);
+    }
+    return () => { stopped = true; timers.forEach((id) => window.clearTimeout(id)); };
+  }, [sessionReady, session, refreshAccount]);
   useEffect(() => {
     if (!sessionReady) return;
     const userId = session?.user?.id || "guest";
@@ -1332,6 +1359,18 @@ export default function Home() {
     };
     setSavedPeople(merge(localPeople, cloudPeople));
     setSavedMoments(merge(localMoments, cloudMoments));
+  }, [sessionReady, session?.user?.id]);
+  useEffect(() => {
+    if (!sessionReady) return;
+    const userId = session?.user?.id || "guest";
+    const scopedKey = `cantoa-my-sound:${userId}`;
+    try {
+      const scoped = localStorage.getItem(scopedKey);
+      const legacy = userId === "guest" ? localStorage.getItem("cantoa-my-sound") : null;
+      const raw = scoped || legacy;
+      setMySound(raw ? (JSON.parse(raw) as MySoundProfile) : null);
+      if (!scoped && legacy) localStorage.setItem(scopedKey, legacy);
+    } catch { setMySound(null); }
   }, [sessionReady, session?.user?.id]);
   useEffect(() => {
     if (!song) { setPronunciationFixOpen(false); setResultLyricLines([]); return; }
@@ -1571,8 +1610,10 @@ export default function Home() {
 
   const saveMySound = () => {
     const profile: MySoundProfile = { style, emotion, language, voice, quality, creativeDirection };
+    const userId = session?.user?.id || "guest";
     setMySound(profile);
-    localStorage.setItem("cantoa-my-sound", JSON.stringify(profile));
+    localStorage.setItem(`cantoa-my-sound:${userId}`, JSON.stringify(profile));
+    if (userId === "guest") localStorage.removeItem("cantoa-my-sound");
     setMessage("My Sound saved. Cantoa can reuse these creative preferences on future songs.");
   };
   const applyMySound = () => {
@@ -5237,7 +5278,7 @@ export default function Home() {
                       <div className="group-share-footer">
                         <div className="group-share-stats"><span><b>{groupContributionCount}</b> contribution{groupContributionCount===1?"":"s"}</span><span><b>{groupVoteCount}</b> vote{groupVoteCount===1?"":"s"}</span></div>
                         <button className="group-share-refresh" onClick={() => void refreshGroupCollectionStatus()} disabled={groupStatusLoading}>{groupStatusLoading ? "Refreshing…" : "Refresh activity"}</button>
-                        <small>Only people with this link can contribute. Your song stays private until you choose to share it elsewhere.</small>
+                        <small>Anyone with this unlisted link can contribute and see shared ideas. The finished song is not shared unless you choose to share it.</small>
                       </div>
                     </section>}
                     {currentSongDNA && <details className="song-dna-preview"><summary>See this song’s DNA</summary><div><span><b>Moment</b>{currentSongDNA.moment}</span><span><b>Language</b>{currentSongDNA.language}</span><span><b>Voice</b>{currentSongDNA.voice}</span><span><b>Style</b>{currentSongDNA.style}</span><span><b>Feeling</b>{currentSongDNA.emotion}</span></div></details>}

@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error) {
-    await refundMinutes(reservation?.userId || null, charged);
+    const refundConfirmed = await refundMinutes(reservation?.userId || null, charged);
     const failure = error as RouterFailure;
     await logGenerationEvent(request, {
       requestType,
@@ -103,12 +103,15 @@ export async function POST(request: NextRequest) {
       requestedSeconds,
       chargedMinutes: charged,
       latencyMs: failure.latencyMs ?? Date.now() - started,
-      status: "refunded",
+      status: refundConfirmed ? "refunded" : "failed",
       errorCode: error instanceof Error ? error.message : "GENERATION_FAILED",
       requestSummary,
       plan: reservation?.plan || null,
     });
     const message = publicGenerationError(error instanceof Error ? error.message : "Song generation failed.");
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({
+      error: refundConfirmed ? message : `${message} Cantoa could not confirm the automatic minute restoration; check your balance before retrying.`,
+      refundConfirmed,
+    }, { status: refundConfirmed ? 500 : 503, headers: { "Cache-Control": "private, no-store" } });
   }
 }

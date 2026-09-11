@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { adminSupabase, authenticatedUser } from "@/lib/supabase";
 import { isCantoaOwner } from "@/lib/owner";
+
+const noStore = { "Cache-Control": "private, no-store" };
 export async function GET(request: NextRequest) {
   const user = await authenticatedUser(request);
   const admin = adminSupabase();
   if (!user)
-    return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+    return NextResponse.json({ error: "Sign in required." }, { status: 401, headers: noStore });
   if (isCantoaOwner(user.email))
     return NextResponse.json({
       plan: "Owner",
@@ -13,7 +15,7 @@ export async function GET(request: NextRequest) {
       minutesRemaining: null,
       isOwner: true,
       cloudConfigured: Boolean(admin),
-    });
+    }, { headers: noStore });
   if (!admin)
     return NextResponse.json({
       plan: "Explore",
@@ -22,13 +24,13 @@ export async function GET(request: NextRequest) {
       freeSongsRemaining: 2,
       isOwner: false,
       cloudConfigured: false,
-    });
+    }, { headers: noStore });
   let { data, error: membershipError } = await admin
     .from("memberships")
     .select("plan,status,minutes_remaining,current_period_end,free_song_claimed,free_songs_remaining,billing_currency,billing_amount_minor")
     .eq("user_id", user.id)
     .maybeSingle();
-  if (membershipError) return NextResponse.json({ error: "Your membership could not be loaded right now." }, { status: 503 });
+  if (membershipError) return NextResponse.json({ error: "Your membership could not be loaded right now." }, { status: 503, headers: noStore });
 
   // Authentication and membership are one product account. The database trigger normally
   // creates this row, but self-heal here as well so a valid Supabase user can never end up
@@ -48,13 +50,13 @@ export async function GET(request: NextRequest) {
       },
       { onConflict: "user_id", ignoreDuplicates: true },
     );
-    if (repairError) return NextResponse.json({ error: "Your Cantoa account could not be initialized right now." }, { status: 503 });
+    if (repairError) return NextResponse.json({ error: "Your Cantoa account could not be initialized right now." }, { status: 503, headers: noStore });
     const repaired = await admin
       .from("memberships")
       .select("plan,status,minutes_remaining,current_period_end,free_song_claimed,free_songs_remaining,billing_currency,billing_amount_minor")
       .eq("user_id", user.id)
       .maybeSingle();
-    if (repaired.error || !repaired.data) return NextResponse.json({ error: "Your Cantoa account could not be initialized right now." }, { status: 503 });
+    if (repaired.error || !repaired.data) return NextResponse.json({ error: "Your Cantoa account could not be initialized right now." }, { status: 503, headers: noStore });
     data = repaired.data;
   }
 
@@ -81,5 +83,6 @@ export async function GET(request: NextRequest) {
           isOwner: false,
           cloudConfigured: true,
         },
+    { headers: noStore },
   );
 }
