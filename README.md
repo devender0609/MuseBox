@@ -365,3 +365,8 @@ Streamlined creation and post-song UX with persistent compact inspiration, polis
 Stability, billing correctness and Owner Console truthfulness release. Prevents duplicate paid checkout, opens authenticated customer-specific Stripe Billing Portal sessions, refills paid generation minutes only on real subscription-cycle invoices, maintains renewal dates, preserves the two-song Explore fallback, improves cloud-delete and Gift Reaction failure feedback, standardizes gift links as unlisted, and adds Escape-key closing for account/membership dialogs.
 
 Owner Console now separates paid-generation economics from Explore/Owner testing spend, treats Explore-to-paid figures as directional overlap rather than attributed CAC, distinguishes recent latency from older selected-window spikes, splits primary-route vs fallback latency, summarizes fallback reasons, adds a Primary/Fallback log filter, shortens route/prompt display, labels calibrated cost rows, and initially shows 25 log rows with progressive loading. No SQL migration and no new environment variable are required.
+
+
+## v18.8.44
+
+Owner Console diagnostic polish on top of the full v18.8.43 stability release. Improves fallback-cause classification, distinguishes fallback-heavy providers from unhealthy primary routes, renames account/cost-policy labels for accuracy, compacts dry routing diagnostics, and reduces generation-log horizontal width. Includes all v18.8.43 billing, quota-renewal, account, gift, deletion, latency, economics, and Owner Console fixes. No SQL migration or new environment variable is required.

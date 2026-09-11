@@ -206,10 +206,23 @@ export async function GET(request: NextRequest) {
   if ((p95LatencyMs || 0) >= 60000) alerts.push({ level: "warning", state: (recent24hP95LatencyMs || 0) < 60000 ? "historical" : "current", message: (recent24hP95LatencyMs || 0) < 60000 ? `Latency has improved: the selected-window P95 is ${Math.round((p95LatencyMs || 0) / 1000)}s because it still includes earlier slow generations, while the last-24h P95 is ${Math.round((recent24hP95LatencyMs || 0) / 1000)}s.` : `Current P95 generation latency is ${Math.round((recent24hP95LatencyMs || p95LatencyMs || 0) / 1000)} seconds. Review slow primary/fallback routes.` });
   if (recentEvents.length >= 2 && (fallbackRate || 0) >= 0.15 && (recent24hFallbackRate || 0) < 0.15) alerts.push({ level: "info", state: "info", message: `Recent routing has recovered: ${Math.round((recent24hPrimaryCompletionRate || 0) * 100)}% primary-route completion and ${Math.round((recent24hFallbackRate || 0) * 100)}% fallback usage in the last 24 hours. The selected-window totals still include older provider-key failures.` });
 
+  const classifyFallbackReason = (value: string | null) => {
+    const raw = String(value || "").toLowerCase();
+    if (!raw) return "Unknown / not logged";
+    if (raw.includes("quota") || raw.includes("api key") || raw.includes("credit") || raw.includes("insufficient") || raw.includes("billing")) return "Quota / API limit";
+    if (raw.includes("rate limit") || raw.includes("too many requests") || raw.includes("429")) return "Rate limit";
+    if (raw.includes("timeout") || raw.includes("timed out") || raw.includes("deadline") || raw.includes("504")) return "Timeout";
+    if (raw.includes("network") || raw.includes("fetch failed") || raw.includes("econn") || raw.includes("socket") || raw.includes("dns") || raw.includes("connection")) return "Network / transport";
+    if (raw.includes("500") || raw.includes("502") || raw.includes("503") || raw.includes("server error") || raw.includes("service unavailable") || raw.includes("provider unavailable")) return "Provider 5xx / unavailable";
+    if (raw.includes("content") || raw.includes("moder") || raw.includes("policy") || raw.includes("safety") || raw.includes("blocked")) return "Provider/content rejection";
+    if (raw.includes("invalid") || raw.includes("unsupported") || raw.includes("bad request") || raw.includes("400") || raw.includes("422") || raw.includes("parameter") || raw.includes("format")) return "Invalid / unsupported request";
+    if (raw.includes("unauthorized") || raw.includes("forbidden") || raw.includes("401") || raw.includes("403") || raw.includes("permission") || raw.includes("auth")) return "Authentication / permission";
+    return "Other provider error";
+  };
+
   const fallbackReasonMap = new Map<string, number>();
   for (const event of fallbackEvents) {
-    const raw = String(event.error_code || "").toLowerCase();
-    const reason = raw.includes("quota") ? "Quota / API limit" : raw.includes("timeout") ? "Timeout" : raw.includes("rate") ? "Rate limit" : raw.includes("content") || raw.includes("moder") ? "Provider/content rejection" : raw ? "Provider error" : "Unspecified provider failure";
+    const reason = classifyFallbackReason(event.error_code);
     fallbackReasonMap.set(reason, (fallbackReasonMap.get(reason) || 0) + 1);
   }
   const fallbackReasons = [...fallbackReasonMap.entries()].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count);

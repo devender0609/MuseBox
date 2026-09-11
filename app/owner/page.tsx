@@ -204,7 +204,7 @@ export default function OwnerConsole() {
           <article><span>Primary-route completion</span><b>{percent(analytics.summary.primaryCompletionRate)}</b><small>Last 24h: {percent(analytics.summary.recent24hPrimaryCompletionRate)} primary · {percent(analytics.summary.recent24hFallbackRate)} fallback</small></article>
           <article><span>Generation latency</span><b>{seconds(analytics.summary.recent24hP50LatencyMs ?? analytics.summary.p50LatencyMs)}</b><small>Recent P50 · recent P95 {seconds(analytics.summary.recent24hP95LatencyMs)} · selected-window P95 {seconds(analytics.summary.p95LatencyMs)}</small></article>
           <article><span>Explore + owner/test spend</span><b>{money(analytics.summary.nonPaidTrafficSpend)}</b><small>Acquisition and testing cost, separated from paid-customer economics</small></article>
-          <article><span>Active membership records</span><b>{analytics.summary.activeAccounts}</b><small>{analytics.summary.exploreCount} Explore · {analytics.summary.creatorCount} Creator · {analytics.summary.studioCount} Studio · INR MRR {rupees(analytics.summary.estimatedActivePlanMrrInr)}</small></article>
+          <article><span>Active accounts by plan</span><b>{analytics.summary.activeAccounts}</b><small>{analytics.summary.exploreCount} Explore · {analytics.summary.creatorCount} Creator · {analytics.summary.studioCount} Studio · INR MRR {rupees(analytics.summary.estimatedActivePlanMrrInr)}</small></article>
         </section>
 
         {analytics.alerts.length > 0 && <section className="owner-alerts" aria-label="Cost and reliability alerts">
@@ -249,7 +249,7 @@ export default function OwnerConsole() {
           <div className="owner-panel-head"><div><p>PROVIDER HEALTH</p><h2>Routing truth & cost snapshot</h2></div><small>{analytics.summary.generationEvents} logged events · {analytics.summary.unknownCostGenerations} unpriced successful generations</small></div>
           <div className="owner-provider-grid">
             {analytics.providers.map((row) => <article key={row.provider}>
-              <div><b>{providerLabel(row.provider)}</b><span className={!analytics.providerAvailability[row.provider] ? "provider-off" : row.health === "healthy" ? "provider-live" : "provider-watch"}>{!analytics.providerAvailability[row.provider] ? "Not configured" : row.health === "healthy" ? "Healthy" : "Attention"}</span></div>
+              <div><b>{providerLabel(row.provider)}</b><span className={!analytics.providerAvailability[row.provider] ? "provider-off" : row.health === "healthy" ? "provider-live" : "provider-watch"}>{!analytics.providerAvailability[row.provider] ? "Not configured" : row.health === "healthy" ? "Healthy" : row.primaryRequests === 0 && row.fallbackIns > 0 ? "Fallback-heavy" : "Attention"}</span></div>
               <small className="provider-recent">Last 24h: {row.recent24hDirectCompletions}/{row.recent24hPrimaryRequests} direct · {row.recent24hFallbackOuts} fallback out · {row.recent24hFallbackIns} fallback in</small>
               <dl>
                 <div><dt>Primary requests</dt><dd>{row.primaryRequests}</dd></div>
@@ -283,7 +283,7 @@ export default function OwnerConsole() {
             </div>
           </article>
           <article className="owner-panel">
-            <div className="owner-panel-head"><div><p>COST POLICY</p><h2>Current calibrated assumptions</h2></div></div>
+            <div className="owner-panel-head"><div><p>COST POLICY</p><h2>Cost assumptions used in analytics</h2></div></div>
             <ul className="owner-policy-list">
               <li><b>ElevenLabs</b><span>{analytics.costPolicy.elevenlabs}</span></li>
               <li><b>Stable Audio</b><span>{analytics.costPolicy.stability}</span></li>

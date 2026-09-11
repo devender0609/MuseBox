@@ -242,3 +242,10 @@ No Supabase migration or new environment variable is required. Deploy normally. 
 - No new environment variables.
 - Retest Karaoke package and Instrumental version on the same vocal Library song.
 - Confirm no new browser tab is opened by progress/download behavior and that both actions remain independently understandable while reusing one shared backing-track job.
+
+
+## v18.8.44
+- Deploy code only.
+- No SQL migration.
+- No new environment variables.
+- Includes every v18.8.43 billing/account/Owner Console correction plus diagnostic-label and fallback-classification polish.
