@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { authenticatedUser } from "@/lib/supabase";
+import { adminSupabase, authenticatedUser } from "@/lib/supabase";
 
 function countryFrom(request: NextRequest) {
   return (request.headers.get("cf-ipcountry") || request.headers.get("x-vercel-ip-country") || "").toUpperCase();
@@ -27,6 +27,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Choose Creator or Studio." }, { status: 400 });
     }
     const plan: keyof typeof PLAN = requestedPlan;
+
+    // A signed-in paid member must manage the existing Stripe subscription rather
+    // than opening a second subscription checkout. This prevents duplicate billing
+    // when moving between Creator and Studio.
+    const admin = adminSupabase();
+    if (admin) {
+      const { data: membership } = await admin
+        .from("memberships")
+        .select("plan,status,stripe_subscription_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const alreadyPaid = membership && (membership.plan === "Creator" || membership.plan === "Studio")
+        && membership.status !== "canceled" && membership.status !== "cancelled"
+        && Boolean(membership.stripe_subscription_id);
+      if (alreadyPaid) {
+        return NextResponse.json({
+          error: "You already have a paid Cantoa membership. Use Manage membership to change or cancel your current plan.",
+          manageMembershipUrl: "/api/stripe/customer-portal",
+        }, { status: 409 });
+      }
+    }
 
     const india = countryFrom(request) === "IN";
     const currency: "inr" | "usd" = india ? "inr" : "usd";

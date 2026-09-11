@@ -212,7 +212,6 @@ Checkout intentionally fails closed when a regional Stripe Price ID is missing. 
 Add the activated Stripe no-code Customer Portal URL in Vercel as:
 
 ```text
-STRIPE_CUSTOMER_PORTAL_URL=https://billing.stripe.com/...
 ```
 
 Paid Creator and Studio users will then see **Manage Membership** in the Cantoa account popup. The link opens Stripe Customer Portal for cancellation, payment-method changes, and invoices.

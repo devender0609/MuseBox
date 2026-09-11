@@ -358,3 +358,10 @@ Create-surface simplification and state audit: source helpers are single-select,
 
 ## v18.8.42
 Streamlined creation and post-song UX with persistent compact inspiration, polished Story input, recommended next actions, and progressive disclosure for advanced tools/exports. No SQL or new env vars.
+
+
+## v18.8.43
+
+Stability, billing correctness and Owner Console truthfulness release. Prevents duplicate paid checkout, opens authenticated customer-specific Stripe Billing Portal sessions, refills paid generation minutes only on real subscription-cycle invoices, maintains renewal dates, preserves the two-song Explore fallback, improves cloud-delete and Gift Reaction failure feedback, standardizes gift links as unlisted, and adds Escape-key closing for account/membership dialogs.
+
+Owner Console now separates paid-generation economics from Explore/Owner testing spend, treats Explore-to-paid figures as directional overlap rather than attributed CAC, distinguishes recent latency from older selected-window spikes, splits primary-route vs fallback latency, summarizes fallback reasons, adds a Primary/Fallback log filter, shortens route/prompt display, labels calibrated cost rows, and initially shows 25 log rows with progressive loading. No SQL migration and no new environment variable are required.

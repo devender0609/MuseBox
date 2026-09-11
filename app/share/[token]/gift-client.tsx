@@ -17,13 +17,15 @@ export default function GiftClient({ token, audioUrl, title, giftTo, giftFrom, d
   const [reactionRecording, setReactionRecording] = useState(false);
   const [reactionUrl, setReactionUrl] = useState("");
   const [reactionBlob, setReactionBlob] = useState<Blob | null>(null);
+  const [reactionError, setReactionError] = useState("");
   const reactionRecorder = useRef<MediaRecorder | null>(null);
   const reactionChunks = useRef<Blob[]>([]);
   useEffect(() => { if (!opened) return; fetch(`/api/share/${token}/reaction`).then((r) => r.ok ? r.json() : null).then((data) => data?.counts && setCounts(data.counts)).catch(() => undefined); }, [opened, token]);
 
   const toggleReactionRecording = async () => {
     if (reactionRecording) { reactionRecorder.current?.stop(); return; }
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") return;
+    setReactionError("");
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") { setReactionError("Reaction recording is not supported in this browser."); return; }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       const video = document.createElement("video");
@@ -54,7 +56,7 @@ export default function GiftClient({ token, audioUrl, title, giftTo, giftFrom, d
       };
       recorder.start(500); draw(); setReactionRecording(true);
       window.setTimeout(() => { if (recorder.state === "recording") recorder.stop(); }, 30000);
-    } catch { setReactionRecording(false); }
+    } catch { setReactionRecording(false); setReactionError("Camera or microphone access was unavailable. Check browser permission and try again."); }
   };
   const shareReaction = async () => {
     if (!reactionBlob) return;
@@ -69,7 +71,7 @@ export default function GiftClient({ token, audioUrl, title, giftTo, giftFrom, d
     const response = await fetch(`/api/share/${token}/reaction`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reaction }) });
     if (response.ok) { const next = await fetch(`/api/share/${token}/reaction`).then((r) => r.json()).catch(() => null); if (next?.counts) setCounts(next.counts); }
   };
-  if (!opened) return <section className="gift-unopened"><div className="gift-envelope" aria-hidden="true">♪</div><p>{giftTo ? `A song was made for ${giftTo}` : "Someone made you a song"}</p><h1>A moment, made into music.</h1>{giftFrom && <span>From {giftFrom}</span>}<button onClick={() => setOpened(true)}>Open your song</button><small>Shared privately with an opt-in Cantoa link.</small></section>;
+  if (!opened) return <section className="gift-unopened"><div className="gift-envelope" aria-hidden="true">♪</div><p>{giftTo ? `A song was made for ${giftTo}` : "Someone made you a song"}</p><h1>A moment, made into music.</h1>{giftFrom && <span>From {giftFrom}</span>}<button onClick={() => setOpened(true)}>Open your song</button><small>Shared with an unlisted Cantoa link.</small></section>;
   return <section className="gift-card gift-opened">
     <a className="gift-brand" href="/">〽 Cantoa <span>Moments → Music</span></a>
     <div className="gift-art" aria-hidden="true"><span>♪</span></div>
@@ -80,9 +82,9 @@ export default function GiftClient({ token, audioUrl, title, giftTo, giftFrom, d
     {audioUrl ? <audio controls preload="metadata" src={audioUrl} /> : <p className="gift-audio-error">Audio is temporarily unavailable. Please try this gift link again later.</p>}
     <div className="gift-meta"><span>{mode === "vocals" ? "Vocals" : "Instrumental"}</span><span>{Math.ceil(duration / 60)} min</span><span>{version || "Original"}</span></div>
     <div className="gift-reactions"><b>Send a reaction</b><div>{OPTIONS.map(([key, emoji, label]) => <button key={key} className={selected === key ? "selected" : ""} onClick={() => react(key)} aria-label={label}><span>{emoji}</span><small>{counts[key]}</small></button>)}</div></div>
-    <div className="gift-reaction-capture"><div><b>Capture your reaction</b><small>Optional · record up to 30 seconds. The video stays on this device unless you choose to share it. Cantoa branding is included on exported reactions.</small></div><button onClick={() => void toggleReactionRecording()}>{reactionRecording ? "Stop recording" : "Record reaction"}</button>{reactionUrl && <><video controls playsInline src={reactionUrl} /><button className="gift-reaction-share" onClick={() => void shareReaction()}>Share or download reaction</button></>}</div>
+    <div className="gift-reaction-capture"><div><b>Capture your reaction</b><small>Optional · record up to 30 seconds. The video stays on this device unless you choose to share it. Cantoa branding is included on exported reactions.</small></div><button onClick={() => void toggleReactionRecording()}>{reactionRecording ? "Stop recording" : "Record reaction"}</button>{reactionError && <small className="gift-reaction-error" role="status">{reactionError}</small>}{reactionUrl && <><video controls playsInline src={reactionUrl} /><button className="gift-reaction-share" onClick={() => void shareReaction()}>Share or download reaction</button></>}</div>
     {lyrics && <details className="gift-lyrics"><summary>Read lyrics</summary><pre>{lyrics}</pre></details>}
     <div className="gift-cta"><p>Want to answer with a song?</p><a href={`/?moment=someone&reply=${token}`}>Send a song reply →</a><p>Know someone who deserves their own song?</p><a href="/?moment=someone">Make one for someone you love →</a></div>
-    <small className="gift-note">Created with Cantoa. Shared by the creator through an opt-in public link.</small>
+    <small className="gift-note">Created with Cantoa. Shared by the creator through an unlisted link.</small>
   </section>;
 }

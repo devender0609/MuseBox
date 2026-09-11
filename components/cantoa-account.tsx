@@ -20,7 +20,7 @@ export type CantoaAccountInfo = {
   plan: string;
   status: string;
   minutesRemaining: number | null;
-  currentPeriodEnd?: string | null;
+  currentPeriodEnd?: string | number | null;
   isOwner: boolean;
   freeSongClaimed?: boolean;
   freeSongsRemaining?: number;
@@ -72,6 +72,14 @@ export default function CantoaAccount({
   const [message, setMessage] = useState("");
   if (!open) return null;
   const client = getSupabaseBrowser();
+  const openMembershipPortal = async () => {
+    if (!session) return;
+    setMessage("Opening secure membership management…");
+    const response = await fetch("/api/stripe/customer-portal", { method: "POST", headers: { Authorization: `Bearer ${session.access_token}` } });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data.url) { window.location.href = data.url; return; }
+    setMessage(data.error || "Membership management could not be opened.");
+  };
   const metadata = session?.user.user_metadata || {};
   const displayName =
     metadata.full_name ||
@@ -267,18 +275,17 @@ export default function CantoaAccount({
               </div>
             )}
             {account && !account.isOwner && (account.plan === "Creator" || account.plan === "Studio") && (
-              <a
+              <button
+                type="button"
                 className="account-manage-membership"
-                href="/api/stripe/customer-portal"
-                target="_blank"
-                rel="noopener noreferrer"
+                onClick={() => void openMembershipPortal()}
               >
                 <Settings />
                 <span>
                   <b>Manage Membership</b>
-                  <small>Cancel, update payment method, or view invoices</small>
+                  <small>Change plan, cancel, update payment method, or view invoices</small>
                 </span>
-              </a>
+              </button>
             )}
             <div className="account-benefits">
               <div>

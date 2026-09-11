@@ -1047,6 +1047,15 @@ export default function Home() {
       document.removeEventListener('dblclick', blockDownloadFlyoutClickThrough, true);
     };
   }, []);
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (accountOpen) setAccountOpen(false);
+      if (membershipOpen) setMembershipOpen(false);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [accountOpen, membershipOpen]);
   const { session, ready: sessionReady, configured: accountConfigured } = useCantoaSession();
   const [accountInfo, setAccountInfo] = useState<CantoaAccountInfo | null>(
     null,
@@ -3651,18 +3660,20 @@ export default function Home() {
     }
   };
   const deleteSaved = async (id: string) => {
-    if (!confirm("Delete this song permanently from your Cantoa library?"))
-      return;
-    await localDelete(id);
-    if (session)
-      await fetch(`/api/library/${id}`, {
+    if (!confirm("Delete this song permanently from your Cantoa library?")) return;
+    if (session) {
+      const response = await fetch(`/api/library/${id}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
-    if (song?.id === id) {
-      setSong(null);
-      setView("library");
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setMessage(data.error || "This song could not be deleted from your cloud library. Nothing was removed locally.");
+        return;
+      }
     }
+    await localDelete(id);
+    if (song?.id === id) { setSong(null); setView("library"); }
     await loadLibrary();
   };
   const choosePlan = async (plan: string) => {
@@ -3686,6 +3697,14 @@ export default function Home() {
       body: JSON.stringify({ plan }),
     });
     const data = await response.json();
+    if (response.status === 409 && data.manageMembershipUrl) {
+      setPlanMessage(data.error || "Manage your existing membership to change plans.");
+      const portalResponse = await fetch(data.manageMembershipUrl, { method: "POST", headers: { Authorization: `Bearer ${session.access_token}` } });
+      const portalData = await portalResponse.json().catch(() => ({}));
+      if (portalResponse.ok && portalData.url) { location.href = portalData.url; return; }
+      setPlanMessage(portalData.error || data.error || "Membership management could not be opened.");
+      return;
+    }
     if (response.ok && data.url) {
       location.href = data.url;
     } else setPlanMessage(data.error || "Checkout is unavailable.");

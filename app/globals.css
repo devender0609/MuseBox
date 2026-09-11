@@ -5306,3 +5306,9 @@ html[data-theme="dark"] .smart-create-directions button.active,.theme-dark .smar
 
 @media(max-width:760px){.moment-lab-recommended-grid{grid-template-columns:1fr}.finish-primary-actions{grid-template-columns:repeat(2,minmax(0,1fr))}.moment-lab-more-tools>summary,.finish-more>summary{align-items:flex-start;flex-direction:column}.moment-lab-more-tools>summary small,.finish-more>summary small{text-align:left}}
 @media(max-width:520px){.finish-primary-actions{grid-template-columns:1fr}.starter-ideas-head{gap:9px}.starter-more{white-space:nowrap}.story-one-box textarea{min-height:104px}.cantoa-source-grid>button{min-height:100px}}
+
+/* v18.8.43 reliability + owner-console refinements */
+.gift-reaction-error{color:#a33b55!important;font-weight:750;font-size:11px!important}
+.owner-fallback-reasons{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}.owner-fallback-reasons span{border:1px solid rgba(85,60,110,.14);background:rgba(255,255,255,.58);border-radius:999px;padding:7px 10px;font-size:12px}.owner-latency-split{margin-top:18px}
+
+.owner-load-more{display:block;margin:18px auto 2px;border:1px solid rgba(58,37,73,.18);background:#fff;border-radius:999px;padding:9px 16px;font-weight:800;cursor:pointer}.dark .owner-load-more{background:#241d2b;color:#fff;border-color:rgba(255,255,255,.15)}

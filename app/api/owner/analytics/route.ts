@@ -177,6 +177,12 @@ export async function GET(request: NextRequest) {
   const latencyValues = successful.map((event) => Number(event.latency_ms)).filter((value) => Number.isFinite(value) && value > 0);
   const p50LatencyMs = percentile(latencyValues, 50);
   const p95LatencyMs = percentile(latencyValues, 95);
+  const primaryLatencyValues = successful.filter((event) => !event.fallback_used).map((event) => Number(event.latency_ms)).filter((value) => Number.isFinite(value) && value > 0);
+  const fallbackLatencyValues = successful.filter((event) => event.fallback_used).map((event) => Number(event.latency_ms)).filter((value) => Number.isFinite(value) && value > 0);
+  const primaryP50LatencyMs = percentile(primaryLatencyValues, 50);
+  const primaryP95LatencyMs = percentile(primaryLatencyValues, 95);
+  const fallbackP50LatencyMs = percentile(fallbackLatencyValues, 50);
+  const fallbackP95LatencyMs = percentile(fallbackLatencyValues, 95);
 
   const recentCutoff = Date.now() - 24 * 60 * 60 * 1000;
   const recentEvents = events.filter((event) => new Date(event.created_at).getTime() >= recentCutoff);
@@ -186,18 +192,27 @@ export async function GET(request: NextRequest) {
   const recentLatencyValues = recentSuccessful.map((event) => Number(event.latency_ms)).filter((value) => Number.isFinite(value) && value > 0);
   const recent24hPrimaryCompletionRate = recentEvents.length ? recentPrimaryCompletions.length / recentEvents.length : null;
   const recent24hFallbackRate = recentSuccessful.length ? recentFallbacks.length / recentSuccessful.length : null;
+  const recent24hP50LatencyMs = percentile(recentLatencyValues, 50);
   const recent24hP95LatencyMs = percentile(recentLatencyValues, 95);
 
   const alerts: Array<{ level: "info" | "warning"; state: "current" | "historical" | "info"; message: string }> = [];
   if (events.length === 0) alerts.push({ level: "info", state: "info", message: "No generation events are logged yet. Run live smoke tests after the analytics SQL migration." });
   if (unknownCostGenerations > 0) alerts.push({ level: "warning", state: "current", message: `${unknownCostGenerations} successful generation${unknownCostGenerations === 1 ? " has" : "s have"} unknown provider cost and are excluded from known-spend totals.` });
   if (mrrInrMinor > 0) alerts.push({ level: "info", state: "info", message: "India MRR is shown separately in ₹. Cantoa does not apply a guessed FX rate when comparing it with USD-denominated provider spend." });
-  if (knownSpendToUsdMrrRate != null && knownSpendToUsdMrrRate >= 0.6) alerts.push({ level: "warning", state: "current", message: `Known provider spend is ${Math.round(knownSpendToUsdMrrRate * 100)}% of active-plan USD MRR in this 30-day window. This includes Explore and Owner/Test traffic; paid-customer economics are shown separately below.` });
-  if (periodDays === 30 && mrrUsdMinor > 0 && exploreKnownSpend / (mrrUsdMinor / 100) >= 0.5) alerts.push({ level: "warning", state: "current", message: `Explore acquisition spend is ${Math.round((exploreKnownSpend / (mrrUsdMinor / 100)) * 100)}% of active-plan USD MRR in this window. Review free-tier economics before expanding free allowances.` });
+  if (periodDays === 30 && mrrUsdMinor > 0 && paidUsdKnownSpend / (mrrUsdMinor / 100) >= 0.7) alerts.push({ level: "warning", state: "current", message: `Paid-customer known generation cost is ${Math.round((paidUsdKnownSpend / (mrrUsdMinor / 100)) * 100)}% of active USD MRR before Stripe, infrastructure and other costs.` });
+  if (periodDays === 30 && exploreKnownSpend > paidUsdKnownSpend && exploreKnownSpend >= 5) alerts.push({ level: "info", state: "info", message: `Explore acquisition investment is ${Number(exploreKnownSpend.toFixed(2)).toLocaleString("en-US", { style: "currency", currency: "USD" })} in this window. Evaluate it with tracked conversion and retention rather than comparing it directly with paid-customer margin.` });
   if (events.length >= 5 && failed.length / events.length >= 0.15) alerts.push({ level: "warning", state: recentEvents.length >= 2 && recentSuccessful.length / recentEvents.length >= 0.9 ? "historical" : "current", message: "Generation failure/refund rate is at least 15%. Review the provider log before expanding traffic." });
   if (successful.length >= 5 && (fallbackRate || 0) >= 0.15) alerts.push({ level: "warning", state: recentEvents.length >= 2 && (recent24hFallbackRate || 0) < 0.15 ? "historical" : "current", message: "Fallback usage is at least 15% of successful generations. Primary-route reliability needs attention even though final success may remain high." });
-  if ((p95LatencyMs || 0) >= 60000) alerts.push({ level: "warning", state: (recent24hP95LatencyMs || 0) < 60000 ? "historical" : "current", message: `P95 generation latency is ${Math.round((p95LatencyMs || 0) / 1000)} seconds. Users may perceive slow generations even when requests ultimately succeed.` });
+  if ((p95LatencyMs || 0) >= 60000) alerts.push({ level: "warning", state: (recent24hP95LatencyMs || 0) < 60000 ? "historical" : "current", message: (recent24hP95LatencyMs || 0) < 60000 ? `Latency has improved: the selected-window P95 is ${Math.round((p95LatencyMs || 0) / 1000)}s because it still includes earlier slow generations, while the last-24h P95 is ${Math.round((recent24hP95LatencyMs || 0) / 1000)}s.` : `Current P95 generation latency is ${Math.round((recent24hP95LatencyMs || p95LatencyMs || 0) / 1000)} seconds. Review slow primary/fallback routes.` });
   if (recentEvents.length >= 2 && (fallbackRate || 0) >= 0.15 && (recent24hFallbackRate || 0) < 0.15) alerts.push({ level: "info", state: "info", message: `Recent routing has recovered: ${Math.round((recent24hPrimaryCompletionRate || 0) * 100)}% primary-route completion and ${Math.round((recent24hFallbackRate || 0) * 100)}% fallback usage in the last 24 hours. The selected-window totals still include older provider-key failures.` });
+
+  const fallbackReasonMap = new Map<string, number>();
+  for (const event of fallbackEvents) {
+    const raw = String(event.error_code || "").toLowerCase();
+    const reason = raw.includes("quota") ? "Quota / API limit" : raw.includes("timeout") ? "Timeout" : raw.includes("rate") ? "Rate limit" : raw.includes("content") || raw.includes("moder") ? "Provider/content rejection" : raw ? "Provider error" : "Unspecified provider failure";
+    fallbackReasonMap.set(reason, (fallbackReasonMap.get(reason) || 0) + 1);
+  }
+  const fallbackReasons = [...fallbackReasonMap.entries()].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count);
 
   const providerNames = ["elevenlabs", "stability", "mureka"] as const;
   const providers = providerNames.map((provider) => {
@@ -264,6 +279,10 @@ export async function GET(request: NextRequest) {
       fallbackRate,
       p50LatencyMs,
       p95LatencyMs,
+      primaryP50LatencyMs,
+      primaryP95LatencyMs,
+      fallbackP50LatencyMs,
+      fallbackP95LatencyMs,
       estimatedProviderSpend: Number(estimatedProviderSpend.toFixed(2)),
       paidTrafficSpend: Number(paidTrafficSpend.toFixed(2)),
       nonPaidTrafficSpend: Number(nonPaidTrafficSpend.toFixed(2)),
@@ -284,10 +303,12 @@ export async function GET(request: NextRequest) {
       recent24hEvents: recentEvents.length,
       recent24hPrimaryCompletionRate,
       recent24hFallbackRate,
+      recent24hP50LatencyMs,
       recent24hP95LatencyMs,
       note: "Known provider spend includes only generations with calibrated cost. Unknown-cost generations are shown separately. Paid contribution before unknown costs is an upper bound until all paid generations are priced. MRR is estimated from active subscription billing currency/amount; INR revenue remains separate from USD provider spend.",
     },
     alerts,
+    fallbackReasons,
     trafficCosts,
     unknownCostImpact: providers.filter((row) => row.unknownCostCount > 0).map((row) => ({ provider: row.provider, unknownCostCount: row.unknownCostCount })),
     providers,
@@ -299,13 +320,13 @@ export async function GET(request: NextRequest) {
       murekaSong: `~$${MUREKA_OBSERVED_SONG_COST_USD.toFixed(3)} per successful song generation from observed Mureka billing: $2.90 / 18 generations (calibrated 2026-09-10)`,
     },
     guardrails: [
-      "One normal provider path at a time; fallbacks only after a compatible provider failure.",
-      "Mureka generation requests use n=1 unless a future user-facing multi-variant workflow explicitly opts in.",
-      "Failed provider-backed audio generations restore reserved membership minutes or free-song entitlement.",
-      "Explore provides two free music creations per account, each capped at 2 minutes; A/B previews and revisions remain paid features.",
+      "One primary provider request at a time; compatible fallback only after provider failure.",
+      "Mureka song requests generate one output per provider call.",
+      "Failed provider-backed audio restores reserved paid minutes or free-song entitlement.",
+      "Explore is limited to two free songs per account, each capped at 2 minutes.",
       "Creator renews at 40 generation minutes; Studio renews at 120 generation minutes.",
-      "Standard instrumental selection does not automatically force the more expensive Stable Audio route.",
-      "Re-exporting an existing song as a Reel, square video, lyric video, gift page or download does not call a music provider.",
+      "Instrumental requests use cost-aware routing rather than automatically forcing Stable Audio.",
+      "Re-exporting an existing song does not call a music-generation provider.",
     ],
   }, { headers: { "Cache-Control": "private, no-store" } });
 }

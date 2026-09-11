@@ -24,9 +24,9 @@ export async function ensureGenerationAccess(request: Request, minutes = 0) {
   if (access.owner) return { userId: null, remaining: null, plan: "Owner" } satisfies Access;
   const membership = access.membership!;
   if (membership.plan === "Explore") {
-    if (Number(membership.free_songs_remaining ?? (membership.free_song_claimed ? 0 : 1)) <= 0) throw new Error("FREE_SONGS_USED");
+    if (Number(membership.free_songs_remaining ?? (membership.free_song_claimed ? 0 : 2)) <= 0) throw new Error("FREE_SONGS_USED");
     if (minutes > 2) throw new Error("FREE_SONG_TOO_LONG");
-    return { userId: access.user.id, remaining: Number(membership.free_songs_remaining ?? 1), plan: "Explore" } satisfies Access;
+    return { userId: access.user.id, remaining: Number(membership.free_songs_remaining ?? 2), plan: "Explore" } satisfies Access;
   }
   if (Number(membership.minutes_remaining) < minutes) throw new Error("INSUFFICIENT_MINUTES");
   return { userId: access.user.id, remaining: Number(membership.minutes_remaining), plan: membership.plan } satisfies Access;

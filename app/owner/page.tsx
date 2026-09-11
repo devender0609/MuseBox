@@ -41,6 +41,7 @@ type EventRow = {
   requested_seconds: number;
   charged_minutes: number;
   estimated_cost_usd: number | null;
+  cost_basis: string | null;
   latency_ms: number | null;
   status: string;
   error_code: string | null;
@@ -67,6 +68,10 @@ type Analytics = {
     fallbackRate: number | null;
     p50LatencyMs: number | null;
     p95LatencyMs: number | null;
+    primaryP50LatencyMs: number | null;
+    primaryP95LatencyMs: number | null;
+    fallbackP50LatencyMs: number | null;
+    fallbackP95LatencyMs: number | null;
     estimatedProviderSpend: number;
     paidTrafficSpend: number;
     nonPaidTrafficSpend: number;
@@ -87,10 +92,12 @@ type Analytics = {
     recent24hEvents: number;
     recent24hPrimaryCompletionRate: number | null;
     recent24hFallbackRate: number | null;
+    recent24hP50LatencyMs: number | null;
     recent24hP95LatencyMs: number | null;
     note: string;
   };
   alerts: Array<{ level: "info" | "warning"; state: "current" | "historical" | "info"; message: string }>;
+  fallbackReasons: Array<{ reason: string; count: number }>;
   trafficCosts: Array<{ label: string; successfulGenerations: number; knownCostGenerations: number; unknownCostGenerations: number; knownSpend: number; knownCostPerSuccess: number | null }>;
   unknownCostImpact: Array<{ provider: string; unknownCostCount: number }>;
   providers: ProviderRow[];
@@ -114,6 +121,8 @@ export default function OwnerConsole() {
   const [planFilter, setPlanFilter] = useState("all");
   const [providerFilter, setProviderFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [routeFilter, setRouteFilter] = useState("all");
+  const [logLimit, setLogLimit] = useState(25);
 
   const token = useCallback(async () => {
     const client = getSupabaseBrowser();
@@ -148,8 +157,12 @@ export default function OwnerConsole() {
     if (planFilter !== "all" && (event.plan || "Other/Unknown") !== planFilter) return false;
     if (providerFilter !== "all" && (event.provider || "unknown") !== providerFilter) return false;
     if (statusFilter !== "all" && event.status !== statusFilter) return false;
+    if (routeFilter === "primary" && event.fallback_used) return false;
+    if (routeFilter === "fallback" && !event.fallback_used) return false;
     return true;
   }) || [];
+
+  const visibleEvents = filteredEvents.slice(0, logLimit);
 
   const routingTest = async (kind: string) => {
     const accessToken = await token();
@@ -181,21 +194,21 @@ export default function OwnerConsole() {
 
       {analytics && <>
         <section className="owner-kpis">
-          <article><span>US/global active-plan MRR</span><b>{money(analytics.summary.estimatedActivePlanMrrUsd)}</b><small>{analytics.summary.creatorCount} Creator · {analytics.summary.studioCount} Studio total</small></article>
-          <article><span>Known provider spend · {analytics.periodDays === 1 ? "24h" : `${analytics.periodDays}d`}</span><b>{money(analytics.summary.estimatedProviderSpend)}</b><small>{analytics.summary.unknownCostGenerations ? `${analytics.summary.unknownCostGenerations} successful generation${analytics.summary.unknownCostGenerations === 1 ? "" : "s"} still unpriced` : "All successful generations in this window are calibrated"}</small></article>
-          <article><span>Final generation success</span><b>{percent(analytics.summary.finalSuccessRate)}</b><small>{analytics.summary.failedOrRefunded} failed/refunded · includes compatible fallbacks</small></article>
-          <article><span>Primary-route completion</span><b>{percent(analytics.summary.primaryCompletionRate)}</b><small>30d: {percent(analytics.summary.fallbackRate)} fallback · Last 24h: {percent(analytics.summary.recent24hPrimaryCompletionRate)} primary / {percent(analytics.summary.recent24hFallbackRate)} fallback</small></article>
+          <article><span>US/global active-plan MRR</span><b>{money(analytics.summary.estimatedActivePlanMrrUsd)}</b><small>{analytics.summary.creatorCount} Creator · {analytics.summary.studioCount} Studio</small></article>
+          <article><span>Paid generation spend · {analytics.periodDays === 1 ? "24h" : `${analytics.periodDays}d`}</span><b>{money(analytics.summary.paidTrafficSpend)}</b><small>{analytics.summary.estimatedActivePlanMrrUsd > 0 ? `${Math.round((analytics.summary.paidUsdKnownSpend / analytics.summary.estimatedActivePlanMrrUsd) * 100)}% of active USD MRR` : "No active USD paid MRR"}</small></article>
+          <article className={analytics.summary.paidContributionBeforeUnknownCosts != null && analytics.summary.paidContributionBeforeUnknownCosts < 0 ? "metric-negative" : "metric-positive"}><span>Paid contribution before other costs</span><b>{money(analytics.summary.paidContributionBeforeUnknownCosts)}</b><small>Before Stripe, infrastructure, tax and unpriced provider costs</small></article>
+          <article><span>Final user-facing success</span><b>{percent(analytics.summary.finalSuccessRate)}</b><small>{analytics.summary.failedOrRefunded} failed/refunded · compatible fallbacks count as success</small></article>
         </section>
 
         <section className="owner-kpis owner-kpis-secondary">
-          <article><span>India active-plan MRR</span><b>{rupees(analytics.summary.estimatedActivePlanMrrInr)}</b><small>Kept separate from USD rather than using a guessed FX rate</small></article>
-          <article><span>Generation latency</span><b>{seconds(analytics.summary.p50LatencyMs)}</b><small>P50 · P95 {seconds(analytics.summary.p95LatencyMs)}</small></article>
-          <article><span>Fallback completions</span><b>{analytics.summary.fallbackGenerations}</b><small>{analytics.summary.successfulGenerations} total successful generations</small></article>
-          <article><span>Active accounts</span><b>{analytics.summary.activeAccounts}</b><small>{analytics.summary.exploreCount} Explore · {analytics.summary.creatorCount} Creator · {analytics.summary.studioCount} Studio</small></article>
+          <article><span>Primary-route completion</span><b>{percent(analytics.summary.primaryCompletionRate)}</b><small>Last 24h: {percent(analytics.summary.recent24hPrimaryCompletionRate)} primary · {percent(analytics.summary.recent24hFallbackRate)} fallback</small></article>
+          <article><span>Generation latency</span><b>{seconds(analytics.summary.recent24hP50LatencyMs ?? analytics.summary.p50LatencyMs)}</b><small>Recent P50 · recent P95 {seconds(analytics.summary.recent24hP95LatencyMs)} · selected-window P95 {seconds(analytics.summary.p95LatencyMs)}</small></article>
+          <article><span>Explore + owner/test spend</span><b>{money(analytics.summary.nonPaidTrafficSpend)}</b><small>Acquisition and testing cost, separated from paid-customer economics</small></article>
+          <article><span>Active membership records</span><b>{analytics.summary.activeAccounts}</b><small>{analytics.summary.exploreCount} Explore · {analytics.summary.creatorCount} Creator · {analytics.summary.studioCount} Studio · INR MRR {rupees(analytics.summary.estimatedActivePlanMrrInr)}</small></article>
         </section>
 
         {analytics.alerts.length > 0 && <section className="owner-alerts" aria-label="Cost and reliability alerts">
-          {analytics.alerts.map((alert) => <article key={alert.message} className={`owner-alert alert-${alert.level} alert-state-${alert.state}`}><b>{alert.state === "current" ? "Current issue" : alert.state === "historical" ? "Historical issue" : "Owner note"}</b><span>{alert.message}</span></article>)}
+          {analytics.alerts.map((alert) => <article key={alert.message} className={`owner-alert alert-${alert.level} alert-state-${alert.state}`}><b>{alert.state === "current" ? "Current issue" : alert.state === "historical" ? (alert.message.toLowerCase().includes("improved") ? "Recovered / improving" : "Historical issue") : "Owner note"}</b><span>{alert.message}</span></article>)}
         </section>}
 
 
@@ -208,9 +221,9 @@ export default function OwnerConsole() {
             <article><span>Paid memberships</span><b>{analytics.summary.creatorCount + analytics.summary.studioCount}</b><small>{analytics.summary.creatorCount} Creator · {analytics.summary.studioCount} Studio</small></article>
           </div>
           <div className="owner-economics-summary owner-economics-decision">
-            <article><span>Explore acquisition cost / generator</span><b>{analytics.summary.exploreAcquisitionCostPerGenerator == null ? "—" : `$${analytics.summary.exploreAcquisitionCostPerGenerator.toFixed(3)}`}</b><small>{analytics.summary.exploreGeneratorCount} unique Explore generator{analytics.summary.exploreGeneratorCount === 1 ? "" : "s"} in this window</small></article>
-            <article><span>Observed Explore → paid</span><b>{analytics.summary.observedExploreToPaidConversionRate == null ? "—" : percent(analytics.summary.observedExploreToPaidConversionRate)}</b><small>{analytics.summary.observedExploreToPaidConversions} current paid member{analytics.summary.observedExploreToPaidConversions === 1 ? "" : "s"} also generated on Explore in this window</small></article>
-            <article><span>Observed acquisition cost / conversion</span><b>{analytics.summary.observedAcquisitionCostPerConversion == null ? "—" : money(analytics.summary.observedAcquisitionCostPerConversion)}</b><small>Explore known spend ÷ observed Explore→paid conversions; directional, not attribution</small></article>
+            <article><span>Explore spend / unique generator</span><b>{analytics.summary.exploreAcquisitionCostPerGenerator == null ? "—" : `$${analytics.summary.exploreAcquisitionCostPerGenerator.toFixed(3)}`}</b><small>{analytics.summary.exploreGeneratorCount} unique Explore generator{analytics.summary.exploreGeneratorCount === 1 ? "" : "s"} in this window</small></article>
+            <article><span>Explore users who are now paid</span><b>{analytics.summary.observedExploreToPaidConversionRate == null ? "—" : percent(analytics.summary.observedExploreToPaidConversionRate)}</b><small>{analytics.summary.observedExploreToPaidConversions} current paid member{analytics.summary.observedExploreToPaidConversions === 1 ? "" : "s"} also generated on Explore · observed overlap, not conversion attribution</small></article>
+            <article><span>Explore spend / observed paid user</span><b>{analytics.summary.observedAcquisitionCostPerConversion == null ? "—" : money(analytics.summary.observedAcquisitionCostPerConversion)}</b><small>Directional overlap metric only · not attribution-based CAC</small></article>
             <article className={analytics.summary.paidContributionBeforeUnknownCosts != null && analytics.summary.paidContributionBeforeUnknownCosts < 0 ? "metric-negative" : "metric-positive"}><span>Paid contribution before unknown costs</span><b>{money(analytics.summary.paidContributionBeforeUnknownCosts)}</b><small>{analytics.summary.knownCostMarginCeilingRate == null ? "No USD paid MRR" : `${percent(analytics.summary.knownCostMarginCeilingRate)} known-cost margin ceiling · ${analytics.summary.paidUsdUnknownCostGenerations} paid generation${analytics.summary.paidUsdUnknownCostGenerations === 1 ? "" : "s"} still unpriced · excludes Stripe, tax and infra`}</small></article>
           </div>
           <div className="owner-traffic-grid">
@@ -251,6 +264,13 @@ export default function OwnerConsole() {
               </dl>
             </article>)}
           </div>
+          <div className="owner-economics-summary owner-latency-split">
+            <article><span>Primary-route latency</span><b>{seconds(analytics.summary.primaryP50LatencyMs)}</b><small>P50 · P95 {seconds(analytics.summary.primaryP95LatencyMs)}</small></article>
+            <article><span>Fallback-route latency</span><b>{seconds(analytics.summary.fallbackP50LatencyMs)}</b><small>P50 · P95 {seconds(analytics.summary.fallbackP95LatencyMs)}</small></article>
+            <article><span>Fallback completions</span><b>{analytics.summary.fallbackGenerations}</b><small>{analytics.summary.successfulGenerations} total successful generations</small></article>
+            <article><span>Top fallback reason</span><b>{analytics.fallbackReasons[0]?.count ?? 0}</b><small>{analytics.fallbackReasons[0]?.reason || "No fallback reason logged"}</small></article>
+          </div>
+          {analytics.fallbackReasons.length > 0 && <div className="owner-fallback-reasons">{analytics.fallbackReasons.map((item) => <span key={item.reason}><b>{item.count}</b> {item.reason}</span>)}</div>}
         </section>
 
         <section className="owner-two-col">
@@ -274,7 +294,7 @@ export default function OwnerConsole() {
         </section>
 
         <section className="owner-panel">
-          <div className="owner-panel-head"><div><p>COST CONTROLS</p><h2>Guardrails currently enforced</h2></div></div>
+          <div className="owner-panel-head"><div><p>COST CONTROLS</p><h2>Cantoa cost-control rules</h2></div><small>Rules reflected by the current application logic; verify after routing or pricing changes.</small></div>
           <div className="owner-guardrails">{analytics.guardrails.map((item) => <div key={item}><span>✓</span><p>{item}</p></div>)}</div>
         </section>
 
@@ -284,23 +304,25 @@ export default function OwnerConsole() {
             <label>Plan<select value={planFilter} onChange={(e) => setPlanFilter(e.target.value)}><option value="all">All plans</option><option value="Explore">Explore</option><option value="Creator">Creator</option><option value="Studio">Studio</option></select></label>
             <label>Provider<select value={providerFilter} onChange={(e) => setProviderFilter(e.target.value)}><option value="all">All providers</option><option value="elevenlabs">ElevenLabs</option><option value="stability">Stable Audio</option><option value="mureka">Mureka</option></select></label>
             <label>Status<select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}><option value="all">All statuses</option><option value="success">Success</option><option value="failed">Failed</option><option value="refunded">Refunded</option></select></label>
-            <span>{filteredEvents.length} shown</span>
+            <label>Route<select value={routeFilter} onChange={(e) => setRouteFilter(e.target.value)}><option value="all">All routes</option><option value="primary">Primary only</option><option value="fallback">Fallback only</option></select></label>
+            <span>{Math.min(logLimit, filteredEvents.length)} of {filteredEvents.length} shown</span>
           </div>
           <div className="owner-table-wrap">
             <table className="owner-table">
               <thead><tr><th>Time</th><th>Request</th><th>Route</th><th>Plan</th><th>Duration</th><th>Cost</th><th>Latency</th><th>Status</th></tr></thead>
-              <tbody>{filteredEvents.map((event) => <tr key={event.id}>
+              <tbody>{visibleEvents.map((event) => <tr key={event.id}>
                 <td>{new Date(event.created_at).toLocaleString()}</td>
-                <td><b>{event.request_type.replaceAll("_"," ")}</b><small>{event.request_summary || "No prompt preview"}</small></td>
-                <td><b>{event.provider ? providerLabel(event.provider) : "—"}</b><small>Preferred: {event.preferred_provider ? providerLabel(event.preferred_provider) : "—"}{event.attempted_providers?.length ? ` · Tried: ${event.attempted_providers.map(providerLabel).join(" → ")}` : ""}</small>{event.fallback_used && <small className="fallback-note">Fallback used{event.error_code ? ` · ${event.error_code.slice(0, 120)}` : ""}</small>}</td>
+                <td><b>{event.request_type.replaceAll("_"," ")}</b><small>{event.request_summary ? `${event.request_summary.slice(0, 96)}${event.request_summary.length > 96 ? "…" : ""}` : "No prompt preview"}</small></td>
+                <td><b>{event.fallback_used && event.preferred_provider && event.provider ? `${providerLabel(event.preferred_provider)} → ${providerLabel(event.provider)}` : event.provider ? providerLabel(event.provider) : "—"}</b>{event.fallback_used ? <small className="fallback-note">Fallback{event.error_code ? ` · ${event.error_code.slice(0, 100)}` : ""}</small> : <small>Primary route</small>}</td>
                 <td>{event.plan || "—"}</td>
                 <td>{event.requested_seconds}s</td>
-                <td>{event.estimated_cost_usd == null ? "Unknown" : money(event.estimated_cost_usd)}</td>
+                <td>{event.estimated_cost_usd == null ? "Unknown" : money(event.estimated_cost_usd)}{event.cost_basis && <small>{event.cost_basis.toLowerCase().includes("observed") || event.cost_basis.toLowerCase().includes("calibr") ? "calibrated" : "known"}</small>}</td>
                 <td>{seconds(event.latency_ms)}</td>
                 <td><span className={`owner-status status-${event.status}`}>{event.status}</span>{!event.fallback_used && event.error_code && <small>{event.error_code.slice(0,120)}</small>}</td>
               </tr>)}</tbody>
             </table>
           </div>
+          {visibleEvents.length < filteredEvents.length && <button className="owner-load-more" onClick={() => setLogLimit((value) => value + 25)}>Load 25 more</button>}
         </section>
 
         <p className="owner-footnote">{analytics.summary.note} Generated {new Date(analytics.generatedAt).toLocaleString()}.</p>

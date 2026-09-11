@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
           minutesRemaining: Number(data.minutes_remaining),
           currentPeriodEnd: data.current_period_end,
           freeSongClaimed: Boolean(data.free_song_claimed),
-          freeSongsRemaining: Number(data.free_songs_remaining ?? (data.free_song_claimed ? 0 : 1)),
+          freeSongsRemaining: Number(data.free_songs_remaining ?? (data.free_song_claimed ? 0 : 2)),
           billingCurrency: data.billing_currency || null,
           billingAmountMinor: data.billing_amount_minor == null ? null : Number(data.billing_amount_minor),
           isOwner: false,
