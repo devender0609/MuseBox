@@ -973,6 +973,14 @@ export default function Home() {
   const [visualScoreFile, setVisualScoreFile] = useState<File | null>(null);
   const [turnAnythingOpen, setTurnAnythingOpen] = useState(false);
   const [starterIdeasExpanded, setStarterIdeasExpanded] = useState(false);
+  // Tracks whether quick-create defaults still come from an untouched starter card.
+  // As soon as the user edits the main brief, the typed brief becomes authoritative.
+  const [starterSeedPrompt, setStarterSeedPrompt] = useState<string | null>(null);
+  type StarterOverrideField = "style" | "emotion" | "language" | "mode" | "duration";
+  const starterOverridesRef = useRef<Set<StarterOverrideField>>(new Set());
+  const markStarterOverride = (field: StarterOverrideField) => {
+    if (starterSeedPrompt) starterOverridesRef.current.add(field);
+  };
   const [smartDirection, setSmartDirection] = useState<"heartfelt" | "cinematic" | "fun" | null>(null);
   type SourcePanel = "story" | "website" | "photo" | "video";
   const [activeSourcePanel, setActiveSourcePanel] = useState<SourcePanel | null>(null);
@@ -1596,6 +1604,7 @@ export default function Home() {
     setStyle(moment.style);
     setDerivedContext("");
     setPrompt(moment.prompt);
+    setStarterSeedPrompt(null);
     if (id === "creator") { setDuration(30); setQuality("release"); }
     if (id === "business") { setDuration(30); setQuality("release"); }
     if (id === "relax") { setMode("instrumental"); setDuration(180); }
@@ -1607,10 +1616,12 @@ export default function Home() {
   };
 
   const applyStarterIdea = (idea: (typeof STARTER_IDEAS)[number]) => {
+    starterOverridesRef.current.clear();
     setMomentId(idea.momentId);
     setCreateMode("quick");
     setCustom(false);
     setPrompt(idea.prompt);
+    setStarterSeedPrompt(idea.prompt);
     setStyle(idea.style);
     setEmotion(idea.emotion);
     setLanguage(idea.language);
@@ -1674,6 +1685,7 @@ export default function Home() {
     ].filter(Boolean);
     setMomentId("someone");
     setPrompt(`Turn this real moment into an original song that feels personal, natural and fun. ${parts.join(" ")} Keep the lyrics singable and emotionally specific; do not sound like a questionnaire.`);
+    setStarterSeedPrompt(null);
     setSourceKind("idea"); setSourceMode(false); setDerivedContext(""); setActiveSourcePanel(null);
     setMessage("Got it — your song idea is ready. Change anything you want, then create.");
     requestAnimationFrame(() => document.getElementById("idea")?.focus());
@@ -1689,6 +1701,7 @@ export default function Home() {
       if (!response.ok) throw new Error(data.error || "Voice memo transcription failed.");
       const text = String(data.text || "").trim();
       if (!text) throw new Error("No clear speech was found in that voice memo.");
+      setStarterSeedPrompt(null);
       setPrompt(`Turn this spoken story into an original song. Keep the emotional meaning and important details, but write natural singable lyrics instead of copying speech word-for-word. Story: ${text}`);
       setSourceKind("idea"); setSourceMode(false); setDerivedContext("");
       setMessage(`Voice memo understood${data.language ? ` · detected ${String(data.language).toUpperCase()}` : ""}. Review the brief before creating.`);
@@ -1706,6 +1719,7 @@ export default function Home() {
     // One primary source at a time. Switching source tools clears hidden source state so
     // an old audio/text/video attachment can never silently override the newly selected tool.
     setMessage("");
+    setStarterSeedPrompt(null);
     if (activeSourcePanel === panel) {
       clearSourcePanelState(panel);
       setActiveSourcePanel(null);
@@ -1729,7 +1743,30 @@ export default function Home() {
   const detectPromptInput = (value: string) => {
     setPrompt(value);
     const lower = value.toLowerCase();
-    if (/\b(instrumental|no vocals|without vocals|background music|soundtrack)\b/.test(lower)) setMode("instrumental");
+    // A starter is only a convenience seed. Once the user edits its generated brief,
+    // remove starter-only hidden defaults so an older card cannot silently compete
+    // with the user's newest wording. Explicit controls chosen after this still apply.
+    if (starterSeedPrompt && value !== starterSeedPrompt) {
+      const overrides = starterOverridesRef.current;
+      setStarterSeedPrompt(null);
+      setMomentId("anything");
+      setOccasion("Personal story");
+      if (!overrides.has("style")) setStyle("Auto — follow my prompt");
+      if (!overrides.has("emotion")) setEmotion("Uplifting");
+      if (!overrides.has("language")) setLanguage("Auto — follow my prompt");
+      if (!overrides.has("mode")) setMode("vocals");
+      if (!overrides.has("duration")) setDuration(120);
+      setSmartDirection(null);
+      setBlendDirections(false);
+      starterOverridesRef.current.clear();
+    }
+    const explicitlyNoVocals = /\b(no vocals|without vocals|music only|instrumental only|purely instrumental)\b/.test(lower);
+    const asksInstrumental = /\b(instrumental|background music|soundtrack|score this|music only)\b/.test(lower);
+    const asksVocals = /\b(vocals?|singer|singing|sung by|male voice|female voice|duet|with lyrics|lead vocal)\b/.test(lower);
+    // Mixed requests such as “instrumental intro with a male singer” are vocal songs.
+    // Explicit “no vocals” wording is the only hard override toward instrumental.
+    if (explicitlyNoVocals || (asksInstrumental && !asksVocals)) setMode("instrumental");
+    else if (asksVocals) setMode("vocals");
     if (/hindi[^\n,.]{0,50}(verse|verses)[^\n,.]{0,80}english[^\n,.]{0,40}(chorus|choruses)|(?:verse|verses)[^\n,.]{0,40}hindi[^\n,.]{0,80}(?:chorus|choruses)[^\n,.]{0,40}english/.test(lower)) {
       setLanguage("Hindi + English"); setSectionLanguages({ verse: "Hindi", chorus: "English", bridge: "Hindi + English" });
     } else if (/punjabi[^\n,.]{0,80}english/.test(lower)) {
@@ -1755,6 +1792,7 @@ export default function Home() {
     const pasted = event.clipboardData.getData("text").trim();
     if (/^https:\/\/\S+$/i.test(pasted)) {
       event.preventDefault();
+      setStarterSeedPrompt(null);
       setPrompt("Create an original song inspired by this webpage");
       setSourceUrl(pasted);
       setSourceKind("link");
@@ -1765,12 +1803,14 @@ export default function Home() {
     } else if (pasted.length > 500) {
       event.preventDefault();
       if (looksLikeCreationInstruction(pasted)) {
+        setStarterSeedPrompt(null);
         setPrompt(pasted.slice(0, 12000));
         setSourceText("");
         setSourceKind("idea");
         setSourceMode(false);
         setMessage("Detailed song direction detected. Cantoa will use it as your creation brief.");
       } else {
+        setStarterSeedPrompt(null);
         setSourceText(pasted.slice(0, 12000));
         setSourceKind("text");
         setSourceMode(false);
@@ -1826,6 +1866,7 @@ export default function Home() {
           const data = await response.json();
           if (!response.ok)
             throw new Error(data.error || "Voice transcription failed.");
+          setStarterSeedPrompt(null);
           setPrompt((current) =>
             current &&
             current !==
@@ -1928,7 +1969,7 @@ export default function Home() {
   const requirePremiumTool = (feature: string) => {
     if (hasPremiumTools) return true;
     setMembershipOpen(true);
-    setMessage(`${feature} is included with Creator and Studio. Your free creations remain downloadable as MP3 and shareable.`);
+    setMessage(`${feature} is included with Creator and Studio. Your free creations remain downloadable as an audio file and shareable.`);
     return false;
   };
   const retryCloudSave = async () => {
@@ -2193,7 +2234,7 @@ export default function Home() {
       try {
         await localPut(savedSong as SavedSong & { blob: Blob });
       } catch {
-        setMessage("Your song was created, but this browser could not save it to the device library. Download the MP3 now and retry cloud save if needed.");
+        setMessage("Your song was created, but this browser could not save it to the device library. Download the audio file now and retry cloud save if needed.");
       }
       await cloudSave(savedSong, blob);
       await loadLibrary();
@@ -2239,6 +2280,7 @@ export default function Home() {
     setTurnAnythingOpen(false);
     setActiveSourcePanel(null);
     setStarterIdeasExpanded(false);
+    setStarterSeedPrompt(null);
     setSmartDirection(null);
     setStoryInterview({ story: "", vibe: "" });
     setPrompt("");
@@ -2335,6 +2377,7 @@ export default function Home() {
       group: "Create one original song from several people’s memories, finding the shared story and a chorus that belongs to everyone.",
     } as const;
     setDerivedContext(hiddenInstructions[kind]);
+    setStarterSeedPrompt(null);
     setView("create");
     setCreateMode("quick");
     setSourceMode(false);
@@ -2403,6 +2446,7 @@ export default function Home() {
         return `${index + 1}. ${kindLabel} from ${item.contributor || "Someone"}: ${item.memory || ""}${extras ? ` (${extras})` : ""}`;
       }).join("\n");
       setView("create"); setCreateMode("quick"); setMomentId("family"); setSourceMode(false); setSourceKind("idea"); setTitle(""); setLyrics("");
+      setStarterSeedPrompt(null);
       setPrompt(`Group Song 2.0: weave these structured contributions into one coherent original song. Respect memories and messages, use song ideas selectively, and treat higher-voted ideas as stronger group signals without ignoring quieter voices. Use the listed feelings to shape the emotional arc. Do not list contributions mechanically or copy private details verbatim unless they naturally belong in lyrics.\n\n${lines}`);
       setMessage(`${contributions.length} Group Song contribution${contributions.length === 1 ? "" : "s"} loaded. Higher-voted ideas are prioritized while every contributor remains represented.`);
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not load contributions."); }
@@ -2461,7 +2505,8 @@ export default function Home() {
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       const slug = song.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "cantoa-moment";
-      zip.file(`${slug}.mp3`, song.blob);
+      const songAudio = audioFileInfo(song.blob);
+      zip.file(`${slug}.${songAudio.extension}`, song.blob);
       zip.file(`${slug}-lyrics.txt`, song.generatedLyrics?.trim() || lyrics.trim() || "No written lyrics were stored for this version.");
       if (currentSongDNA) zip.file(`${slug}-song-dna.json`, JSON.stringify(currentSongDNA, null, 2));
       zip.file(`${slug}-story.txt`, [recipient && `For: ${recipient}`, dedication && `Dedication: ${dedication}`, personalDetails && `Story / details: ${personalDetails}`, `Creation brief: ${song.prompt}`].filter(Boolean).join("\n\n"));
@@ -2911,7 +2956,7 @@ export default function Home() {
     try {
       const blob = await makeBackingTrack();
       if (!song || songExportKey(song) !== expectedSongId) throw new Error("The opened song changed before this export completed. Please export again from the current song.");
-      const extension = blob.type === "audio/mpeg" ? "mp3" : "wav";
+      const extension = audioFileInfo(blob).extension;
       downloadBlob(blob, `${song.title.replace(/\s+/g, "-").toLowerCase()}-instrumental.${extension}`);
       notify("Instrumental version ready.");
     } catch (error) {
@@ -2941,7 +2986,7 @@ export default function Home() {
       const safeLines = JSON.stringify(lyricLines).replace(/</g, "\u003c");
       const embeddedAudio = await blobToDataUrl(backingTrackSourceRef.current || backing);
       const playerHtml = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${slug} · Cantoa Karaoke</title><style>body{margin:0;background:#120f16;color:#fff;font:16px system-ui,sans-serif;display:grid;place-items:center;min-height:100vh}.card{width:min(760px,92vw);background:#211a27;border:1px solid #45384e;border-radius:24px;padding:24px;box-shadow:0 24px 70px #0008}h1{margin:0 0 8px;font-size:28px}.note{color:#d8d0de;margin:0 0 18px}audio{width:100%;margin:10px 0 18px}.lyrics{max-height:55vh;overflow:auto}.line{padding:10px 12px;border-radius:10px;color:#d8d0de}.line.active{background:#6a3159;color:#fff;font-weight:750}.status{font-size:13px;color:#f0b7cf;margin:0 0 8px}</style></head><body><main class="card"><h1>Cantoa Karaoke</h1><p class="note">Estimated lyric timing. Play the backing track and sing along.</p><p id="status" class="status">Audio is embedded in this player, so it works even when opened directly from the ZIP.</p><audio id="a" controls preload="metadata" src="${embeddedAudio}"></audio><div id="lyrics" class="lyrics"></div></main><script>const lines=${safeLines};const a=document.getElementById('a'),box=document.getElementById('lyrics'),status=document.getElementById('status');lines.forEach((t,i)=>{const p=document.createElement('div');p.className='line';p.textContent=t;p.dataset.i=i;box.appendChild(p)});function paint(){const d=a.duration||${song.duration};const i=Math.min(lines.length-1,Math.floor((a.currentTime/Math.max(1,d))*lines.length));[...box.children].forEach((el,n)=>el.classList.toggle('active',n===i));const el=box.children[i];if(el)el.scrollIntoView({block:'nearest'})}a.addEventListener('loadedmetadata',()=>{status.textContent='Backing track ready · press Play.'});a.addEventListener('error',()=>{status.textContent='The embedded backing track could not be decoded in this browser. Open the included WAV instead.'});a.addEventListener('timeupdate',paint);a.addEventListener('seeked',paint);</script></body></html>`;
-      const backingExt = backing.type === "audio/mpeg" ? "mp3" : "wav";
+      const backingExt = audioFileInfo(backing).extension;
       zip.file(`${slug}-karaoke.${backingExt}`, backing);
       zip.file(`${slug}-lyrics.txt`, lyricText);
       zip.file(`${slug}-lyrics.lrc`, lrc);
@@ -2972,6 +3017,7 @@ export default function Home() {
     setSourceFile(
       new File([song.blob], `${song.title}.${audioInfo.extension}`, { type: audioInfo.type }),
     );
+    setStarterSeedPrompt(null);
     setPrompt(`${revisionStrengthText(revisionStrength)}\n\n${emotionLock ? "Emotion Lock: preserve the original emotional identity, intimacy/energy balance and overall feeling unless the requested change explicitly requires otherwise.\n\n" : ""}Requested change: ${instruction}`);
     setTitle(`${song.title} — ${label}`);
     setMessage(
@@ -3004,7 +3050,7 @@ export default function Home() {
         setShareStatus("Shared from this device.");
       } else {
         download();
-        setShareStatus("MP3 downloaded—attach it wherever you share.");
+        setShareStatus("Audio downloaded—attach it wherever you share.");
       }
     } catch {
       setShareStatus("");
@@ -3035,7 +3081,7 @@ export default function Home() {
     window.open(targets[destination], "_blank", "noopener,noreferrer");
     download();
     setShareStatus(
-      `MP3 downloaded · ${destination[0].toUpperCase() + destination.slice(1)} opened.`,
+      `Audio downloaded · ${destination[0].toUpperCase() + destination.slice(1)} opened.`,
     );
   };
 
@@ -3558,7 +3604,7 @@ export default function Home() {
       const JSZip=(await import("jszip")).default; const zip=new JSZip(); const variants=[15,30,60];
       for(const seconds of variants){
         const response=await fetch("/api/music",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session.access_token}`},body:JSON.stringify({prompt:`${completePrompt}\n\nCreate a ${seconds}-second brand/jingle variant. Put the memorable brand hook early, keep the ending clean, and make this version feel complete at exactly this short duration.`,instrumental:mode==="instrumental",duration:seconds,structured:true})});
-        const data=response.ok?await response.blob():await response.json().catch(()=>({})); if(!response.ok) throw new Error((data as any).error||`${seconds}-second jingle could not be created.`); zip.file(`${song.title.replace(/[^a-z0-9]+/gi,"-").toLowerCase()}-${seconds}s.mp3`,data as Blob);
+        const data=response.ok?await response.blob():await response.json().catch(()=>({})); if(!response.ok) throw new Error((data as any).error||`${seconds}-second jingle could not be created.`); const info=audioFileInfo(data as Blob); zip.file(`${song.title.replace(/[^a-z0-9]+/gi,"-").toLowerCase()}-${seconds}s.${info.extension}`,data as Blob);
       }
       zip.file("README.txt","Cantoa Business Jingle Pack\n\nContains 15-, 30- and 60-second generated variants. Each is a separate provider-backed generation and consumes generation minutes."); const blob=await zip.generateAsync({type:"blob"}); if(jinglePackUrl)URL.revokeObjectURL(jinglePackUrl); const url=URL.createObjectURL(blob);setJinglePackUrl(url);const a=document.createElement("a");a.href=url;a.download=`${song.title.replace(/[^a-z0-9]+/gi,"-").toLowerCase()}-jingle-pack.zip`;armDownloadClickGuard();a.click();notify("15/30/60 jingle pack created and downloaded.");void refreshAccount();
     } catch(error){setMessage(error instanceof Error?error.message:"Jingle pack could not be created.")} finally{setJinglePackBuilding(false);setAction("")}
@@ -3572,7 +3618,8 @@ export default function Home() {
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       const slug = song.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "cantoa-song";
-      zip.file(`${slug}.mp3`, song.blob);
+      const songAudio = audioFileInfo(song.blob);
+      zip.file(`${slug}.${songAudio.extension}`, song.blob);
       zip.file(`${slug}-lyrics.txt`, song.generatedLyrics?.trim() || lyrics.trim() || "Instrumental / no lyrics saved.");
       zip.file(`${slug}-caption.txt`, `Listen to “${song.title}” — created with Cantoa. #Cantoa #AIMusic`);
       zip.file(`${slug}-metadata.txt`, `Title: ${song.title}\nCreated: ${new Date(song.createdAt || Date.now()).toISOString()}\nMode: ${song.mode}\nDuration: ${song.duration}s\nVersion: ${song.versionLabel || "Original"}\n\nCreation brief:\n${song.prompt}\n\nRights note: Commercial eligibility depends on the Cantoa plan and provider terms applicable when the audio was generated. This record is not a copyright determination.`);
@@ -3591,7 +3638,7 @@ export default function Home() {
         packVideo = await renderSocialVideo("vertical", false);
       }
       if (packVideo) zip.file(`${slug}-reel-15s.webm`, packVideo);
-      zip.file("README.txt", "Cantoa Creator Pack 2.0\n\nIncludes: generated MP3, lyrics, platform-specific captions, creation metadata/rights note, square/vertical/YouTube cover artwork and (when supported by the browser) a ready-to-post 15-second vertical WebM social video.\n\nWebM is broadly accepted for upload workflows; transcode to MP4 in your publishing tool if a destination requires MP4.");
+      zip.file("README.txt", "Cantoa Creator Pack 2.0\n\nIncludes: generated audio in its native supported format, lyrics, platform-specific captions, creation metadata/rights note, square/vertical/YouTube cover artwork and (when supported by the browser) a ready-to-post 15-second vertical WebM social video.\n\nWebM is broadly accepted for upload workflows; transcode to MP4 in your publishing tool if a destination requires MP4.");
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `${slug}-creator-pack.zip`; armDownloadClickGuard(); a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
       notify("Creator Pack 2.0 downloaded.");
@@ -4095,7 +4142,7 @@ export default function Home() {
                       list="quick-styles"
                       maxLength={200}
                       value={style}
-                      onChange={(e) => setStyle(e.target.value)}
+                      onChange={(e) => { markStarterOverride("style"); setStyle(e.target.value); }}
                       placeholder="Auto — follow my idea"
                     />
                     <datalist id="quick-styles">
@@ -4217,7 +4264,7 @@ export default function Home() {
                       <input
                         maxLength={200}
                         value={style}
-                        onChange={(e) => setStyle(e.target.value)}
+                        onChange={(e) => { markStarterOverride("style"); setStyle(e.target.value); }}
                         placeholder="e.g. soulful pop, warm piano, uplifting"
                       />
                       <small>
@@ -4239,11 +4286,12 @@ export default function Home() {
                       ].map((x) => (
                         <button
                           key={x}
-                          onClick={() =>
+                          onClick={() => {
+                            markStarterOverride("style");
                             setStyle(
                               x === "Surprise me" ? "Auto — choose for me" : x,
-                            )
-                          }
+                            );
+                          }}
                         >
                           {x}
                         </button>
@@ -4265,7 +4313,7 @@ export default function Home() {
                         list="languages"
                         maxLength={60}
                         value={language}
-                        onChange={(e) => setLanguage(e.target.value)}
+                        onChange={(e) => { markStarterOverride("language"); setLanguage(e.target.value); }}
                         placeholder="Auto — follow my prompt"
                       />
                       <datalist id="languages">
@@ -4351,7 +4399,7 @@ export default function Home() {
                     Emotional arc
                     <select
                       value={emotion}
-                      onChange={(e) => setEmotion(e.target.value)}
+                      onChange={(e) => { markStarterOverride("emotion"); setEmotion(e.target.value); }}
                     >
                       {[
                         "Uplifting",
@@ -4436,7 +4484,7 @@ export default function Home() {
                   <input
                     list="languages"
                     value={language}
-                    onChange={(e) => setLanguage(e.target.value)}
+                    onChange={(e) => { markStarterOverride("language"); setLanguage(e.target.value); }}
                     placeholder="Auto — follow my prompt"
                   />
                   <datalist id="languages">
@@ -4522,13 +4570,13 @@ export default function Home() {
                   <div className="segmented">
                     <button
                       className={mode === "vocals" ? "active" : ""}
-                      onClick={() => setMode("vocals")}
+                      onClick={() => { markStarterOverride("mode"); setMode("vocals"); }}
                     >
                       <Mic2 /> Vocals
                     </button>
                     <button
                       className={mode === "instrumental" ? "active" : ""}
-                      onClick={() => setMode("instrumental")}
+                      onClick={() => { markStarterOverride("mode"); setMode("instrumental"); }}
                     >
                       <Music2 /> Instrumental
                     </button>
@@ -4589,11 +4637,11 @@ export default function Home() {
                   max="300"
                   step="15"
                   value={duration}
-                  onChange={(e) => setDuration(+e.target.value)}
+                  onChange={(e) => { markStarterOverride("duration"); setDuration(+e.target.value); }}
                 />
                 <div>
                   {[30, 120, 180, 300].map((n) => (
-                    <button key={n} onClick={() => setDuration(n)}>
+                    <button key={n} onClick={() => { markStarterOverride("duration"); setDuration(n); }}>
                       {n < 60 ? `${n}s` : `${n / 60} min`}
                     </button>
                   ))}
@@ -4711,7 +4759,7 @@ export default function Home() {
               </button>
               {message && <p className={/could not|failed|error|not supported|unavailable|sign in|used\. choose|shorten it|try again|requires|must |cannot /i.test(message) ? "error" : "app-status"}>{message}</p>}
               <p className="fineprint">
-                A complete MP3 is generated from your description. Longer songs
+                A complete audio file is generated from your description. Longer songs
                 use more provider credits.
               </p>
             </section>
@@ -4835,7 +4883,7 @@ export default function Home() {
                       <button type="button" onClick={download}>
                         <Music4 />
                         <span>
-                          <b>MP3 audio</b>
+                          <b>Audio file</b>
                           <small>Complete song · ready to play</small>
                         </span>
                       </button>
@@ -5396,7 +5444,7 @@ export default function Home() {
                   <ul>
                     <li>Build and customize before signing in</li>
                     <li><b>2 free music creations</b> · choose any two Moments · up to 2 minutes each</li>
-                    <li>MP3 download, sharing and opt-in gift page</li>
+                    <li>Audio download, sharing and opt-in gift page</li>
                     <li>Multilingual + pronunciation controls</li>
                     <li>Private cloud library after sign-in</li>
                   </ul>
@@ -5417,7 +5465,7 @@ export default function Home() {
                     <li>Failed provider generations are restored automatically</li>
                     <li>Unlimited reasonable-use Reels, square videos, lyric videos, gift pages and re-exports from finished songs</li>
                     <li>Custom “Make it better” revisions + optional A/B / Best of Both</li>
-                    <li>MP3 + WAV, Creator Pack 2.0 and My Sound</li>
+                    <li>Native audio download + WAV export, Creator Pack 2.0 and My Sound</li>
                     <li>Stem separation where supported*</li>
                     <li>Commercial-use eligibility for qualifying paid generations*</li>
                   </ul>

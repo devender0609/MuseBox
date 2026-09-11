@@ -142,6 +142,26 @@ export async function GET(request: NextRequest) {
   const creatorCount = memberships.filter((item) => item.plan === "Creator").length;
   const studioCount = memberships.filter((item) => item.plan === "Studio").length;
   const exploreCount = memberships.filter((item) => item.plan === "Explore").length;
+  const paidMemberships = memberships.filter((item) => item.plan === "Creator" || item.plan === "Studio");
+  const usdPaidMembers = paidMemberships.filter((item) => billingCurrencyFrom(item.billing_currency) === "usd").length;
+  const inrPaidMembers = paidMemberships.filter((item) => billingCurrencyFrom(item.billing_currency) === "inr").length;
+  const paidMembers = paidMemberships
+    .map((item) => {
+      const plan = paidPlanFrom(item.plan)!;
+      const currency = billingCurrencyFrom(item.billing_currency);
+      const fallback = currency === "inr" ? CURRENT_INR[plan] : CURRENT_USD[plan];
+      const amountMinor = Number(item.billing_amount_minor ?? fallback);
+      return {
+        email: String(item.email || "").trim() || "Unknown email",
+        plan,
+        currency: currency.toUpperCase(),
+        amountMinor,
+        amount: Number((amountMinor / 100).toFixed(2)),
+        minutesRemaining: Number(item.minutes_remaining ?? 0),
+        regionalMarket: currency === "inr" ? "India regional price" : "US/global price",
+      };
+    })
+    .sort((a, b) => a.currency.localeCompare(b.currency) || a.plan.localeCompare(b.plan) || a.email.localeCompare(b.email));
 
   let mrrUsdMinor = 0;
   let mrrInrMinor = 0;
@@ -312,6 +332,8 @@ export async function GET(request: NextRequest) {
       paidUsdKnownSpend: Number(paidUsdKnownSpend.toFixed(2)),
       estimatedActivePlanMrrUsd: Number((mrrUsdMinor / 100).toFixed(2)),
       estimatedActivePlanMrrInr: Number((mrrInrMinor / 100).toFixed(2)),
+      usdPaidMembers,
+      inrPaidMembers,
       unknownCostGenerations,
       recent24hEvents: recentEvents.length,
       recent24hPrimaryCompletionRate,
@@ -319,6 +341,14 @@ export async function GET(request: NextRequest) {
       recent24hP50LatencyMs,
       recent24hP95LatencyMs,
       note: "Known provider spend includes only generations with calibrated cost. Unknown-cost generations are shown separately. Paid contribution before unknown costs is an upper bound until all paid generations are priced. MRR is estimated from active subscription billing currency/amount; INR revenue remains separate from USD provider spend.",
+    },
+    paidMembers,
+    billingConfig: {
+      stripeSecretConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
+      creatorUsdConfigured: Boolean(process.env.STRIPE_CREATOR_PRICE_USD),
+      studioUsdConfigured: Boolean(process.env.STRIPE_STUDIO_PRICE_USD),
+      creatorInrConfigured: Boolean(process.env.STRIPE_CREATOR_PRICE_INR),
+      studioInrConfigured: Boolean(process.env.STRIPE_STUDIO_PRICE_INR),
     },
     alerts,
     fallbackReasons,

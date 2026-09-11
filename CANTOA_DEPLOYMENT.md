@@ -261,3 +261,14 @@ No Supabase migration or new environment variable is required. Deploy normally. 
 - Cloud deletion stops before deleting the database row if storage deletion fails.
 - Native audio MIME/extension is preserved for downloads, sharing, revisions and cloud upload metadata where supported.
 - No SQL migration and no new environment variables are required.
+
+## v18.8.48 input precedence, regional billing visibility, and audit hardening
+
+- Starter cards are convenience seeds only. Once a user edits the main creation brief, Cantoa clears starter-only quick defaults so the newest typed request is authoritative.
+- Mixed wording such as “instrumental intro with a male singer” remains a vocal song; explicit “no vocals / instrumental only” wording is the hard instrumental override.
+- Programmatic prompt replacements (voice memo, long paste, derived song, Group Song, revision) clear stale starter provenance.
+- Owner Console reports USD and INR active-plan MRR separately and includes an owner-only active paid-member table with plan, recorded Stripe currency/price, regional price market, and minutes remaining.
+- INR in Owner Console means the subscription is recorded against the INR regional Stripe price. It must not be presented as proof of the customer’s physical location or nationality.
+- Native supported audio extensions are preserved in cloud storage and ZIP/export packages instead of forcing `.mp3` filenames.
+- `.env.example` now documents every production environment variable currently referenced by the source, including optional `CANTOA_OWNER_EMAILS`; the obsolete Creator Payment Link example entry was removed. The Studio Payment Link entry remains only for legacy webhook fallback.
+- No new SQL or new environment variable is required for v18.8.48.

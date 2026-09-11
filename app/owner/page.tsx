@@ -88,6 +88,8 @@ type Analytics = {
     paidUsdKnownSpend: number;
     estimatedActivePlanMrrUsd: number;
     estimatedActivePlanMrrInr: number;
+    usdPaidMembers: number;
+    inrPaidMembers: number;
     unknownCostGenerations: number;
     recent24hEvents: number;
     recent24hPrimaryCompletionRate: number | null;
@@ -96,6 +98,8 @@ type Analytics = {
     recent24hP95LatencyMs: number | null;
     note: string;
   };
+  paidMembers: Array<{ email: string; plan: "Creator" | "Studio"; currency: "USD" | "INR"; amountMinor: number; amount: number; minutesRemaining: number; regionalMarket: string }>;
+  billingConfig: { stripeSecretConfigured: boolean; creatorUsdConfigured: boolean; studioUsdConfigured: boolean; creatorInrConfigured: boolean; studioInrConfigured: boolean };
   alerts: Array<{ level: "info" | "warning"; state: "current" | "historical" | "info"; message: string }>;
   fallbackReasons: Array<{ reason: string; count: number }>;
   trafficCosts: Array<{ label: string; successfulGenerations: number; knownCostGenerations: number; unknownCostGenerations: number; knownSpend: number; knownCostPerSuccess: number | null }>;
@@ -194,9 +198,9 @@ export default function OwnerConsole() {
 
       {analytics && <>
         <section className="owner-kpis">
-          <article><span>US/global active-plan MRR</span><b>{money(analytics.summary.estimatedActivePlanMrrUsd)}</b><small>{analytics.summary.creatorCount} Creator · {analytics.summary.studioCount} Studio</small></article>
+          <article><span>US/global active-plan MRR</span><b>{money(analytics.summary.estimatedActivePlanMrrUsd)}</b><small>{analytics.summary.usdPaidMembers} USD paid member{analytics.summary.usdPaidMembers === 1 ? "" : "s"}</small></article>
+          <article><span>India / INR active-plan MRR</span><b>{rupees(analytics.summary.estimatedActivePlanMrrInr)}</b><small>{analytics.summary.inrPaidMembers} INR paid member{analytics.summary.inrPaidMembers === 1 ? "" : "s"} · INR checkout {analytics.billingConfig.creatorInrConfigured && analytics.billingConfig.studioInrConfigured ? "configured" : "incomplete"}</small></article>
           <article><span>Paid generation spend · {analytics.periodDays === 1 ? "24h" : `${analytics.periodDays}d`}</span><b>{money(analytics.summary.paidTrafficSpend)}</b><small>{analytics.summary.estimatedActivePlanMrrUsd > 0 ? `${Math.round((analytics.summary.paidUsdKnownSpend / analytics.summary.estimatedActivePlanMrrUsd) * 100)}% of active USD MRR` : "No active USD paid MRR"}</small></article>
-          <article className={analytics.summary.paidContributionBeforeUnknownCosts != null && analytics.summary.paidContributionBeforeUnknownCosts < 0 ? "metric-negative" : "metric-positive"}><span>Paid contribution before other costs</span><b>{money(analytics.summary.paidContributionBeforeUnknownCosts)}</b><small>Before Stripe, infrastructure, tax and unpriced provider costs</small></article>
           <article><span>Final user-facing success</span><b>{percent(analytics.summary.finalSuccessRate)}</b><small>{analytics.summary.failedOrRefunded} failed/refunded · compatible fallbacks count as success</small></article>
         </section>
 
@@ -211,6 +215,22 @@ export default function OwnerConsole() {
           {analytics.alerts.map((alert) => <article key={alert.message} className={`owner-alert alert-${alert.level} alert-state-${alert.state}`}><b>{alert.state === "current" ? "Current issue" : alert.state === "historical" ? (alert.message.toLowerCase().includes("improved") ? "Recovered / improving" : "Historical issue") : "Owner note"}</b><span>{alert.message}</span></article>)}
         </section>}
 
+
+        <section className="owner-panel">
+          <div className="owner-panel-head"><div><p>PAID MEMBERS</p><h2>Who is paying, by plan and currency</h2></div><small>Currency reflects the Stripe regional price recorded for the active subscription. INR identifies India regional pricing; it is not a guess from email or profile location.</small></div>
+          <div className="owner-table-wrap">
+            <table className="owner-table">
+              <thead><tr><th>Customer</th><th>Plan</th><th>Price</th><th>Currency / market</th><th>Minutes left</th></tr></thead>
+              <tbody>{analytics.paidMembers.length ? analytics.paidMembers.map((member) => <tr key={`${member.email}-${member.plan}-${member.currency}`}>
+                <td><b>{member.email}</b></td>
+                <td>{member.plan}</td>
+                <td>{member.currency === "INR" ? rupees(member.amount) : money(member.amount)}</td>
+                <td><b>{member.currency}</b><small>{member.regionalMarket}</small></td>
+                <td>{Number.isFinite(member.minutesRemaining) ? member.minutesRemaining.toFixed(1).replace(/\.0$/, "") : "—"}</td>
+              </tr>) : <tr><td colSpan={5}>No active Creator or Studio memberships are currently recorded.</td></tr>}</tbody>
+            </table>
+          </div>
+        </section>
 
         <section className="owner-panel">
           <div className="owner-panel-head"><div><p>TRAFFIC ECONOMICS</p><h2>Where provider spend is coming from</h2></div><small>Owner/test traffic is separated from customer traffic. Unknown-cost generations are never treated as $0.</small></div>
