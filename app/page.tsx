@@ -1902,7 +1902,11 @@ export default function Home() {
       const sourceData = await sourceResponse.json();
       if (!sourceResponse.ok)
         throw new Error(sourceData.error || "The webpage could not be read.");
-      generationPrompt += `\n\nCreate an original song inspired by this webpage. Do not copy protected wording unless supplied by the user. Page: ${sourceData.title}. Source material: ${sourceData.text}`;
+      const sourceLead = `\n\nCreate an original song inspired by this webpage. Do not copy protected wording unless supplied by the user. Page: ${sourceData.title}. Source material: `;
+      const maxPromptChars = 3800;
+      const availableForSource = Math.max(320, maxPromptChars - generationPrompt.length - sourceLead.length);
+      const sourceExcerpt = String(sourceData.text || "").slice(0, availableForSource).trim();
+      generationPrompt = `${generationPrompt}${sourceLead}${sourceExcerpt}`.slice(0, maxPromptChars);
     }
     return generationPrompt;
   };
@@ -2066,14 +2070,22 @@ export default function Home() {
           },
           body: JSON.stringify({ prompt: generationPrompt, duration }),
         });
-        const planData = await planResponse.json();
-        if (!planResponse.ok)
-          throw new Error(
-            planData.error || "The song plan could not be created.",
-          );
-        compositionPlan = planData.compositionPlan;
-        generatedLyrics = lyricsFromPlan(compositionPlan) || generatedLyrics;
-        setMessage("Lyrics and structure are ready. Generating the audio…");
+        const planData = await planResponse.json().catch(() => ({}));
+        if (!planResponse.ok) {
+          if ([400, 422, 500, 502, 503].includes(planResponse.status)) {
+            compositionPlan = undefined;
+            generatedLyrics = "";
+            setMessage("Cantoa could not pre-plan the lyrics, so it is creating the song directly instead…");
+          } else {
+            throw new Error(
+              planData.error || "The song plan could not be created.",
+            );
+          }
+        } else {
+          compositionPlan = planData.compositionPlan;
+          generatedLyrics = lyricsFromPlan(compositionPlan) || generatedLyrics;
+          setMessage("Lyrics and structure are ready. Generating the audio…");
+        }
       } else if (mode === "vocals" && lyrics.trim()) {
         generatedLyrics = lyrics.trim();
         setMessage("Using your lyrics as provided. Creating the music around them…");

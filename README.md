@@ -1,3 +1,6 @@
+## v18.8.45
+Website → song reliability: bounded webpage context and direct-generation fallback when optional lyric/structure planning fails. No SQL or new env vars.
+
 # Cantoa Studio v18.8.20
 
 # v18.8.7 change

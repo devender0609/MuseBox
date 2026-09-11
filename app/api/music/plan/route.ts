@@ -41,9 +41,14 @@ export async function POST(request: NextRequest) {
       );
     const body = await request.json();
     const prompt = typeof body.prompt === "string" ? body.prompt.trim() : "";
-    if (prompt.length < 8 || prompt.length > 4000)
+    if (prompt.length < 8)
       return NextResponse.json(
         { error: "Describe the song in at least 8 characters." },
+        { status: 400 },
+      );
+    if (prompt.length > 4000)
+      return NextResponse.json(
+        { error: "This song brief is too long to pre-plan. Shorten the description or source material and try again." },
         { status: 400 },
       );
     const duration = Math.min(600, Math.max(10, Number(body.duration) || 30));
