@@ -5372,3 +5372,132 @@ fieldset.create-view:disabled textarea,
 fieldset.create-view:disabled select {
   cursor: wait;
 }
+
+/* v18.8.53 — mobile layout uniformity and iOS safe-area hardening */
+html, body { max-width: 100%; overflow-x: hidden; }
+.app { min-height: 100dvh; }
+
+@media (max-width: 590px) {
+  .workspace,
+  .create-view,
+  .result-view,
+  .library-view,
+  .composer,
+  .moment-launcher,
+  .starter-ideas,
+  .cantoa-source-launcher {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .create-view,
+  .result-view,
+  .library-view,
+  .world-view {
+    width: 100%;
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-bottom: calc(116px + env(safe-area-inset-bottom));
+  }
+
+  .composer {
+    width: 100%;
+    padding: 16px;
+    border-radius: 20px;
+  }
+
+  /* Show one complete starter card on phones instead of clipping the next card. */
+  .starter-ideas-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    overflow: visible;
+    scroll-snap-type: none;
+    gap: 10px;
+    padding-bottom: 0;
+  }
+  .starter-ideas-grid > button {
+    width: 100%;
+    min-height: 116px;
+    flex: none;
+  }
+
+  .starter-ideas-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 10px;
+  }
+  .starter-ideas-head > div { min-width: 0; }
+  .starter-ideas-head b { font-size: 15px; line-height: 1.2; }
+  .starter-ideas-head small { font-size: 10.5px; line-height: 1.4; }
+  .starter-more { align-self: start; }
+
+  /* The source launcher should never squeeze its heading beside a large pill button. */
+  .cantoa-source-launcher-head {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    align-items: stretch;
+  }
+  .cantoa-source-launcher-head > div { min-width: 0; }
+  .cantoa-source-launcher-head > button {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .simple-create-tabs {
+    width: 100% !important;
+    max-width: none;
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* Equal-size mobile navigation with iOS safe-area padding. */
+  .sidebar {
+    height: calc(68px + env(safe-area-inset-bottom));
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+  }
+  .sidebar nav {
+    height: 52px;
+    gap: 6px;
+    align-items: stretch;
+  }
+  .sidebar nav button,
+  .sidebar nav .owner-nav-link {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    height: 52px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 14px;
+  }
+  .sidebar nav .owner-nav-link {
+    font-size: 0 !important;
+    gap: 0;
+  }
+  .sidebar nav .owner-nav-link svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .workspace > header {
+    min-width: 0;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .header-actions { min-width: 0; gap: 6px; }
+  .header-actions > button { min-width: 0; }
+}
+
+@media (max-width: 390px) {
+  .create-view,
+  .result-view,
+  .library-view,
+  .world-view { padding-left: 10px; padding-right: 10px; }
+  .composer { padding: 14px; }
+  .starter-ideas { padding: 10px; }
+  .starter-ideas-head { grid-template-columns: 1fr; }
+  .starter-more { width: 100%; }
+}
