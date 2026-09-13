@@ -55,7 +55,8 @@ type VocalMode = "vocals" | "instrumental";
 type SourceKind = "idea" | "text" | "link" | "audio";
 type CreateMode = "quick" | "advanced";
 type RevisionStrength = "subtle" | "balanced" | "bold";
-type LibraryTransform = "another" | "style" | "lyrics_music" | "rewrite" | "extend" | "section" | "instrumental" | "vocal" | "blend";
+type LibraryTransform = "smart" | "another" | "style" | "vibe" | "lyrics_music" | "rewrite" | "extend" | "section" | "instrumental" | "vocal" | "blend";
+type SmartRemixKeep = { lyrics: boolean; style: boolean; voice: boolean; energy: boolean; structure: boolean };
 type SmartRevisionAction = { label: string; prompt: string; versionLabel: string };
 type PronunciationEntry = { id: string; target: string; reading: string; section: string };
 type RememberedPronunciation = { id: string; target: string; reading: string; updatedAt: number };
@@ -1174,8 +1175,9 @@ export default function Home() {
   const [libraryFilter, setLibraryFilter] = useState<"all" | "vocal" | "instrumental" | "revised">("all");
   const [libraryTransformOpen, setLibraryTransformOpen] = useState(false);
   const [libraryTransformTarget, setLibraryTransformTarget] = useState<SavedSong | null>(null);
-  const [libraryTransformKind, setLibraryTransformKind] = useState<LibraryTransform>("another");
+  const [libraryTransformKind, setLibraryTransformKind] = useState<LibraryTransform>("smart");
   const [libraryTransformNote, setLibraryTransformNote] = useState("");
+  const [smartRemixKeep, setSmartRemixKeep] = useState<SmartRemixKeep>({ lyrics: false, style: true, voice: false, energy: true, structure: false });
   const [blendSongIds, setBlendSongIds] = useState<string[]>([]);
   const [libraryTransformBusy, setLibraryTransformBusy] = useState(false);
   const libraryTransformDialogRef = useRef<HTMLElement | null>(null);
@@ -3918,20 +3920,24 @@ export default function Home() {
     }
     return "";
   };
-  const openLibraryTransform = (saved: SavedSong, kind: LibraryTransform = "another") => {
+  const openLibraryTransform = (saved: SavedSong, kind: LibraryTransform = "smart") => {
     libraryTransformReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setLibraryTransformTarget(saved);
     setLibraryTransformKind(kind);
     setLibraryTransformNote("");
+    setSmartRemixKeep({ lyrics: false, style: true, voice: false, energy: true, structure: false });
     setBlendSongIds([saved.id]);
     setLibraryTransformOpen(true);
     setMessage("");
   };
   const transformPrompt = (kind: LibraryTransform, saved: SavedSong, note: string) => {
     const extra = note.trim() ? ` User direction: ${note.trim()}` : "";
+    const smartPreserve = Object.entries(smartRemixKeep).filter(([, keep]) => keep).map(([key]) => key === "voice" ? "voice character" : key).join(", ");
     const prompts: Record<Exclude<LibraryTransform, "blend">, string> = {
+      smart: `Smart Remix “${saved.title}” into a new original version. Preserve only these selected qualities from the source: ${smartPreserve || "overall emotional identity"}. Everything else may evolve when it improves the song. Do not copy a protected artist identity or mechanically duplicate the recording.${extra || " Make tasteful creative decisions while keeping the result recognizably related to the source."}`,
       another: `Create a fresh original version inspired by “${saved.title}”. Preserve its emotional identity and strongest musical qualities, but write a new hook and make the result clearly distinct rather than a copy.${extra}`,
       style: `Rearrange “${saved.title}” in a new style while preserving the song's recognizable emotional identity, structure and strongest musical ideas.${extra || " Choose a tasteful contrasting style that still fits the song."}`,
+      vibe: `Create a new original song that matches the high-level mood, energy and production atmosphere of “${saved.title}” without copying its melody, lyrics or recording. Treat the source as a vibe reference, not a template.${extra || " Keep the emotional temperature recognizable while creating fresh musical and lyrical material."}`,
       lyrics_music: `Keep the supplied lyrics intact, but create a meaningfully different arrangement, instrumentation, groove and production around them. Preserve the words; change the music.${extra}`,
       rewrite: `Keep the musical feeling, pacing and production DNA of “${saved.title}”, but write completely fresh lyrics and a new lyrical hook. Do not copy the original words.${extra}`,
       extend: `Create a longer, naturally developed version of “${saved.title}”. Preserve its core identity, then add meaningful musical development and a clean extended ending rather than simply looping material.${extra}`,
@@ -3991,6 +3997,7 @@ export default function Home() {
       const blob = await savedSongAudio(target);
       const storedLyrics = await savedSongLyrics(target);
       if (libraryTransformKind === "lyrics_music" && !storedLyrics.trim()) throw new Error("Cantoa does not have stored lyrics for this version. Open the song and add the lyrics first, or choose another transformation.");
+      if (libraryTransformKind === "smart" && smartRemixKeep.lyrics && !storedLyrics.trim()) throw new Error("Smart Remix cannot preserve lyrics because this Library version has no stored lyrics. Turn off Keep lyrics or choose a song with stored lyrics.");
       const promptText = transformPrompt(libraryTransformKind, target, libraryTransformNote);
       setDerivedContext(`Create from an existing Cantoa song. The original must remain unchanged. Use the attached song only as source material for a new version.`);
       if (song?.url) URL.revokeObjectURL(song.url);
@@ -4016,11 +4023,11 @@ export default function Home() {
       if (libraryTransformKind === "instrumental") setMode("instrumental");
       else if (libraryTransformKind === "vocal") setMode("vocals");
       else setMode(target.mode);
-      if (libraryTransformKind === "lyrics_music") setLyrics(storedLyrics);
+      if (libraryTransformKind === "lyrics_music" || (libraryTransformKind === "smart" && smartRemixKeep.lyrics)) setLyrics(storedLyrics);
       else setLyrics("");
       if (libraryTransformKind === "extend") setDuration(Math.min(300, Math.max(target.duration + 60, Math.round(target.duration * 1.35))));
       else setDuration(Math.min(300, Math.max(30, target.duration)));
-      const transformLabels: Record<Exclude<LibraryTransform, "blend">, string> = { another: "Another version", style: "Restyled", lyrics_music: "New arrangement", rewrite: "New lyrics", extend: "Extended", section: "Section replaced", instrumental: "Instrumental version", vocal: "Vocal version" };
+      const transformLabels: Record<Exclude<LibraryTransform, "blend">, string> = { smart: "Smart remix", another: "Another version", style: "Restyled", vibe: "Vibe match", lyrics_music: "New arrangement", rewrite: "New lyrics", extend: "Extended", section: "Section replaced", instrumental: "Instrumental version", vocal: "Vocal version" };
       setPreparedVersionLabel(transformLabels[libraryTransformKind as Exclude<LibraryTransform, "blend">]);
       setView("create");
       setLibraryTransformOpen(false);
@@ -5485,10 +5492,10 @@ export default function Home() {
                     <div className="moment-lab-recommended">
                       <div className="moment-lab-recommended-head"><span><b>Try next</b><small>A few useful choices — everything else stays under More tools.</small></span></div>
                       <div className="moment-lab-recommended-grid">
-                        <button onClick={() => void renderSocialVideo("vertical")} disabled={!socialVideoSupported || socialVideoRendering}><Video /><span><b>{socialVideoRendering && socialVideoFormat === "vertical" ? "Finding best moment…" : "Best Moment AI"}</b><small>Find a strong 15-second Reel moment automatically.</small></span></button>
+                        <button onClick={() => void renderSocialVideo("vertical")} disabled={!socialVideoSupported || socialVideoRendering}><Video /><span><b>{socialVideoRendering && socialVideoFormat === "vertical" ? "Finding best moment…" : "Social Cut Creator"}</b><small>Find a strong 15-second Reel moment automatically.</small></span></button>
                         <button onClick={() => void createMemoryCapsule()} disabled={!!action}><Gift /><span><b>Memory Capsule</b><small>Keep the song, story, photos and finished visuals together.</small></span></button>
                         <button onClick={() => prepareDerivedMoment("dna")}><Waves /><span><b>Song DNA</b><small>Reuse this song's creative identity in something new.</small></span></button>
-                        <button onClick={() => song && openLibraryTransform({ id: song.id || crypto.randomUUID(), title: song.title, prompt: song.prompt, mode: song.mode, duration: song.duration, createdAt: song.createdAt || Date.now(), blob: song.blob, parentId: song.parentId, versionLabel: song.versionLabel, generatedLyrics: song.generatedLyrics, ownerId: session?.user.id })}><GitMerge /><span><b>Remix / transform</b><small>Change style, keep lyrics, extend, add vocals or blend with another library song.</small></span></button>
+                        <button onClick={() => song && openLibraryTransform({ id: song.id || crypto.randomUUID(), title: song.title, prompt: song.prompt, mode: song.mode, duration: song.duration, createdAt: song.createdAt || Date.now(), blob: song.blob, parentId: song.parentId, versionLabel: song.versionLabel, generatedLyrics: song.generatedLyrics, ownerId: session?.user.id })}><GitMerge /><span><b>Smart Remix Studio</b><small>Choose what to keep, change style, match a vibe, edit sections or blend Library songs.</small></span></button>
                         <button onClick={() => void createGroupCollection()}><UserCircle /><span><b>Group Song <em className="creator-badge">Creator+</em></b><small>Invite people with an unlisted link to add memories, ideas and votes.</small></span></button>
                       </div>
                     </div>
@@ -5742,8 +5749,10 @@ export default function Home() {
               </div>
               <div className="library-transform-grid">
                 {([
+                  ["smart", "Smart Remix", "Choose exactly what should stay recognizable and let the rest evolve."],
                   ["another", "Another version", "Same emotional identity, fresh hook and arrangement."],
                   ["style", "Change style", "Rearrange it in a different genre or production style."],
+                  ["vibe", "Match this vibe", "Keep the mood and energy while creating fresh melody and words."],
                   ["lyrics_music", "Keep lyrics · change music", "Preserve stored lyrics while rebuilding the music."],
                   ["rewrite", "Keep music feel · new lyrics", "Use the musical DNA but write a fresh lyrical story."],
                   ["extend", "Extend", "Develop a longer version with a natural new section or ending."],
@@ -5757,6 +5766,24 @@ export default function Home() {
                   </button>
                 ))}
               </div>
+              {libraryTransformKind === "smart" && (
+                <div className="smart-remix-preserve">
+                  <div><b>What should stay recognizable?</b><small>Select only the qualities Cantoa should preserve. The source audio remains unchanged in your Library.</small></div>
+                  <div className="smart-remix-chips">
+                    {([
+                      ["lyrics", "Lyrics"],
+                      ["style", "Style"],
+                      ["voice", "Voice character"],
+                      ["energy", "Energy"],
+                      ["structure", "Structure"],
+                    ] as [keyof SmartRemixKeep, string][]).map(([key, label]) => (
+                      <button type="button" key={key} className={smartRemixKeep[key] ? "active" : ""} aria-pressed={smartRemixKeep[key]} onClick={() => setSmartRemixKeep((current) => ({ ...current, [key]: !current[key] }))}>
+                        {smartRemixKeep[key] ? <Check /> : <Plus />} {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {libraryTransformKind === "blend" && (
                 <div className="blend-library-picker">
                   <div><b>Select 2–4 songs</b><small>The first selected song is the audio anchor. The others contribute prompt/lyric/mood DNA; Cantoa creates a new composition rather than stitching recordings together.</small></div>
@@ -5775,8 +5802,8 @@ export default function Home() {
                 </div>
               )}
               <label className="library-transform-note">
-                <span>{libraryTransformKind === "blend" ? "How should Cantoa combine them?" : libraryTransformKind === "section" ? "What section should change?" : "Extra direction · optional"}</span>
-                <textarea rows={3} maxLength={800} value={libraryTransformNote} onChange={(event) => setLibraryTransformNote(event.target.value)} placeholder={libraryTransformKind === "blend" ? "e.g. Keep Song A's chorus energy, Song B's romantic storytelling and Song C's cinematic production." : libraryTransformKind === "section" ? "e.g. Replace the second verse with a more personal memory, then lift into the existing chorus." : "e.g. Warmer acoustic production, male vocal, slightly faster tempo…"} />
+                <span>{libraryTransformKind === "blend" ? "How should Cantoa combine them?" : libraryTransformKind === "section" ? "What section should change?" : libraryTransformKind === "smart" ? "What should change? · optional" : libraryTransformKind === "vibe" ? "Describe the new song · optional" : "Extra direction · optional"}</span>
+                <textarea rows={3} maxLength={800} value={libraryTransformNote} onChange={(event) => setLibraryTransformNote(event.target.value)} placeholder={libraryTransformKind === "blend" ? "e.g. Keep Song A's chorus energy, Song B's romantic storytelling and Song C's cinematic production." : libraryTransformKind === "section" ? "e.g. Replace the second verse with a more personal memory, then lift into the existing chorus." : libraryTransformKind === "smart" ? "e.g. Keep the emotional energy but make the production more cinematic and the chorus bigger." : libraryTransformKind === "vibe" ? "e.g. A completely new anniversary song with the same warm late-night atmosphere." : "e.g. Warmer acoustic production, male vocal, slightly faster tempo…"} />
               </label>
               <div className="library-transform-actions"><button type="button" onClick={() => setLibraryTransformOpen(false)} disabled={libraryTransformBusy}>Cancel</button><button type="button" className="primary" onClick={() => void prepareLibraryTransform()} disabled={libraryTransformBusy || (libraryTransformKind === "blend" && blendSongIds.length < 2) || (libraryTransformKind === "section" && libraryTransformNote.trim().length < 4)}><Sparkles /> {libraryTransformBusy ? "Preparing…" : "Continue to Create"}</button></div>
             </section>

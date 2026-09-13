@@ -5763,3 +5763,126 @@ html[data-theme="dark"] textarea::placeholder {
   color: #b9adbf !important;
   opacity: .88;
 }
+
+/* v18.9.0 — feature-release polish: Smart Remix Studio + dark-mode share parity */
+/* Legacy .share-panel direct-child rules used a white background. The social share panel
+   is now explicitly theme-safe so dark mode does not render white islands. */
+.share-panel.social > .panel-heading,
+.share-panel.social > .social-grid {
+  background: transparent !important;
+  padding: 0 !important;
+}
+.theme-dark .share-panel.social {
+  background: linear-gradient(145deg,#1c1723,#15111b) !important;
+  border-color: #44384f !important;
+  color: #fbf8ff !important;
+}
+.theme-dark .share-panel.social > .panel-heading,
+.theme-dark .share-panel.social > .social-grid {
+  background: transparent !important;
+  color: #fbf8ff !important;
+}
+.theme-dark .share-panel.social .panel-heading b { color:#fff !important; }
+.theme-dark .share-panel.social .panel-heading small { color:#d0c7d5 !important; opacity:1 !important; }
+.theme-dark .share-panel.social .social-grid button {
+  background: linear-gradient(145deg,#282131,#211a2a) !important;
+  color: #fbf8ff !important;
+  border-color: #4b3f58 !important;
+}
+.theme-dark .share-panel.social .social-grid button:hover:not(:disabled) {
+  background: linear-gradient(145deg,#33283e,#2a2134) !important;
+  color:#fff !important;
+}
+.theme-dark .share-panel.social .social-grid .xmark { color:#fff !important; }
+
+/* Secret Song Drop used var(--card,#fff), and --card is not a core theme token. Use the
+   studio theme tokens directly so the scheduling row remains readable in both themes. */
+.secret-drop-row {
+  border: 1px solid color-mix(in srgb,var(--a) 20%,var(--border));
+  background: linear-gradient(135deg,color-mix(in srgb,var(--a) 7%,var(--surface)),var(--surface-2));
+  color: var(--text);
+}
+.secret-drop-row b { color: var(--text); }
+.secret-drop-row small { color: var(--text-2); opacity:1; }
+.secret-drop-row input,
+.secret-drop-row button {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 8px 10px;
+}
+.secret-drop-row button { font-weight: 800; cursor:pointer; }
+.secret-drop-row button:disabled { opacity:.58; cursor:not-allowed; }
+.theme-dark .secret-drop-row {
+  background: linear-gradient(135deg,#241c2d,#1b1622) !important;
+  border-color:#4b3e58 !important;
+  color:#fbf8ff !important;
+}
+.theme-dark .secret-drop-row b { color:#fff !important; }
+.theme-dark .secret-drop-row small { color:#c9bfd1 !important; }
+.theme-dark .secret-drop-row input,
+.theme-dark .secret-drop-row button {
+  background:#120f17 !important;
+  border-color:#4a3d57 !important;
+  color:#fbf8ff !important;
+  color-scheme: dark;
+}
+.theme-dark .secret-drop-row button:not(:disabled):hover {
+  background:#2a2134 !important;
+  border-color:color-mix(in srgb,var(--a) 46%,#4a3d57) !important;
+}
+.theme-light .secret-drop-row input,
+.theme-light .secret-drop-row button { color-scheme: light; }
+
+/* Smart Remix Studio keeps new controls inside the existing Create-from-song modal. */
+.smart-remix-preserve {
+  margin-top: 15px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(135deg,color-mix(in srgb,var(--a) 6%,var(--surface)),color-mix(in srgb,var(--b) 5%,var(--surface-2)));
+}
+.smart-remix-preserve > div:first-child { display:flex; flex-direction:column; gap:3px; }
+.smart-remix-preserve > div:first-child b { font-size:11px; color:var(--text); }
+.smart-remix-preserve > div:first-child small { font-size:10px; line-height:1.4; color:var(--text-2); }
+.smart-remix-chips { display:flex; flex-wrap:wrap; gap:7px; margin-top:10px; }
+.smart-remix-chips button {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  min-height:34px;
+  padding:7px 10px;
+  border:1px solid var(--border);
+  border-radius:999px;
+  background:var(--surface);
+  color:var(--text);
+  font-size:10px;
+  font-weight:800;
+  cursor:pointer;
+}
+.smart-remix-chips button svg { width:13px; height:13px; }
+.smart-remix-chips button.active {
+  border-color:color-mix(in srgb,var(--a) 58%,var(--border));
+  background:linear-gradient(135deg,color-mix(in srgb,var(--a) 18%,var(--surface)),color-mix(in srgb,var(--b) 12%,var(--surface)));
+  color:var(--text);
+}
+.theme-dark .smart-remix-preserve {
+  background:linear-gradient(135deg,#221a2c,#19141f) !important;
+  border-color:#493b57 !important;
+}
+.theme-dark .smart-remix-chips button {
+  background:#282131 !important;
+  border-color:#4b3f58 !important;
+  color:#fbf8ff !important;
+}
+.theme-dark .smart-remix-chips button.active {
+  background:linear-gradient(135deg,#4a3568,#3a294d) !important;
+  border-color:#9a79d2 !important;
+  color:#fff !important;
+}
+@media(max-width:520px){
+  .smart-remix-chips{display:grid;grid-template-columns:1fr 1fr}
+  .smart-remix-chips button{justify-content:flex-start;width:100%}
+}
