@@ -5744,3 +5744,22 @@ html, body { max-width: 100%; overflow-x: hidden; }
     font-size: 14px;
   }
 }
+
+
+/* v18.8.56 — explicit placeholder contrast in both themes.
+   Browsers vary in default placeholder opacity/color, so keep every native input and
+   textarea readable without making placeholders compete with entered text. */
+.theme-light input::placeholder,
+.theme-light textarea::placeholder,
+html[data-theme="light"] input::placeholder,
+html[data-theme="light"] textarea::placeholder {
+  color: #756a7c !important;
+  opacity: .82;
+}
+.theme-dark input::placeholder,
+.theme-dark textarea::placeholder,
+html[data-theme="dark"] input::placeholder,
+html[data-theme="dark"] textarea::placeholder {
+  color: #b9adbf !important;
+  opacity: .88;
+}

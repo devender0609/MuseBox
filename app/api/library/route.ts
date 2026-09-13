@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
       };
     }),
   );
-  return NextResponse.json({ songs });
+  return NextResponse.json({ songs }, { headers: { "Cache-Control": "private, no-store" } });
 }
 
 export async function POST(request: NextRequest) {

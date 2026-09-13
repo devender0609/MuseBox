@@ -1178,6 +1178,9 @@ export default function Home() {
   const [libraryTransformNote, setLibraryTransformNote] = useState("");
   const [blendSongIds, setBlendSongIds] = useState<string[]>([]);
   const [libraryTransformBusy, setLibraryTransformBusy] = useState(false);
+  const libraryTransformDialogRef = useRef<HTMLElement | null>(null);
+  const libraryTransformReturnFocusRef = useRef<HTMLElement | null>(null);
+  const libraryTransformBusyRef = useRef(false);
   const [legacyLocalCount, setLegacyLocalCount] = useState(0);
   const songAudio = useRef<HTMLAudioElement | null>(null);
   // Synchronous lock closes the tiny window before React re-renders disabled controls.
@@ -1194,6 +1197,52 @@ export default function Home() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("cantoa-theme", theme);
   }, [theme]);
+  useEffect(() => {
+    libraryTransformBusyRef.current = libraryTransformBusy;
+  }, [libraryTransformBusy]);
+  useEffect(() => {
+    if (!libraryTransformOpen) return;
+    const dialog = libraryTransformDialogRef.current;
+    const previouslyFocused = libraryTransformReturnFocusRef.current;
+    requestAnimationFrame(() => {
+      const first = dialog?.querySelector<HTMLElement>(".modal-close");
+      (first || dialog)?.focus();
+    });
+    const handleDialogKeys = (event: KeyboardEvent) => {
+      const currentDialog = libraryTransformDialogRef.current;
+      if (!currentDialog) return;
+      if (event.key === "Escape") {
+        if (!libraryTransformBusyRef.current) {
+          event.preventDefault();
+          setLibraryTransformOpen(false);
+        }
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(currentDialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [href], [tabindex]:not([tabindex="-1"])'
+      )).filter((element) => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true");
+      if (!focusable.length) {
+        event.preventDefault();
+        currentDialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener("keydown", handleDialogKeys);
+    return () => {
+      window.removeEventListener("keydown", handleDialogKeys);
+      if (previouslyFocused && document.contains(previouslyFocused)) previouslyFocused.focus();
+    };
+  }, [libraryTransformOpen]);
   useEffect(() => {
     void fetch("/api/pricing", { cache: "no-store" })
       .then((response) => response.ok ? response.json() : null)
@@ -3783,9 +3832,11 @@ export default function Home() {
       let url = compareObjectUrls.current.get(item.id);
       if (!url) {
         if (song?.id === item.id) url = song.url;
-        else if (item.blob) { url = URL.createObjectURL(item.blob); compareObjectUrls.current.set(item.id, url); }
-        else if (item.remoteUrl) url = item.remoteUrl;
-        else throw new Error("Audio unavailable");
+        else {
+          const blob = await savedSongAudio(item);
+          url = URL.createObjectURL(blob);
+          compareObjectUrls.current.set(item.id, url);
+        }
       }
       const audio = new Audio(url);
       compareAudio.current = audio;
@@ -3794,7 +3845,7 @@ export default function Home() {
       audio.addEventListener("ended", () => setComparePlayingId(null));
       await audio.play();
       setComparePlayingId(item.id);
-    } catch { setMessage("This version could not be played for comparison. Refresh the library and try again."); }
+    } catch { setMessage("This version could not be played for comparison. Cantoa refreshed its secure Library link automatically when possible; please try again."); }
   };
   const keepComparedVersion = (item: SavedSong) => {
     setPreferredVersionId(item.id);
@@ -3812,21 +3863,63 @@ export default function Home() {
     compareObjectUrls.current.clear();
   }, []);
 
+  const refreshSavedSongLinks = async (saved: SavedSong) => {
+    if (!session || saved.blob) return saved;
+    const response = await fetch("/api/library", {
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (!response.ok) throw new Error("Cantoa could not refresh this Library song right now.");
+    const data = (await response.json()) as { songs?: CloudSong[] };
+    const fresh = (data.songs || []).find((item) => item.id === saved.id);
+    if (!fresh?.url) throw new Error("This Library song is no longer available.");
+    const refreshed: SavedSong = {
+      ...saved,
+      remoteUrl: fresh.url,
+      remoteLyricsUrl: fresh.lyrics_url || undefined,
+      title: fresh.title || saved.title,
+      prompt: fresh.prompt ?? saved.prompt,
+      duration: fresh.duration || saved.duration,
+      parentId: fresh.parent_id || saved.parentId,
+      versionLabel: fresh.version_label || saved.versionLabel,
+    };
+    setLibrary((items) => items.map((item) => item.id === refreshed.id ? refreshed : item));
+    return refreshed;
+  };
   const savedSongAudio = async (saved: SavedSong) => {
     if (saved.blob) return saved.blob;
-    if (!saved.remoteUrl) throw new Error("Audio unavailable");
-    const response = await fetch(saved.remoteUrl, { cache: "no-store" });
-    if (!response.ok) throw new Error("Audio unavailable");
-    return response.blob();
+    let current = saved;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (current.remoteUrl) {
+        const response = await fetch(current.remoteUrl, { cache: "no-store" }).catch(() => null);
+        if (response?.ok) return response.blob();
+      }
+      if (attempt === 0 && session) {
+        current = await refreshSavedSongLinks(current);
+        continue;
+      }
+      break;
+    }
+    throw new Error("Cantoa could not load this Library audio. Please try again.");
   };
   const savedSongLyrics = async (saved: SavedSong) => {
     if (saved.generatedLyrics?.trim()) return saved.generatedLyrics.trim();
-    if (!saved.remoteLyricsUrl) return "";
-    return fetch(saved.remoteLyricsUrl, { cache: "no-store" })
-      .then((response) => response.ok ? response.text() : "")
-      .catch(() => "");
+    let current = saved;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      if (current.remoteLyricsUrl) {
+        const response = await fetch(current.remoteLyricsUrl, { cache: "no-store" }).catch(() => null);
+        if (response?.ok) return response.text();
+      }
+      if (attempt === 0 && session && current.remoteUrl) {
+        current = await refreshSavedSongLinks(current);
+        continue;
+      }
+      break;
+    }
+    return "";
   };
   const openLibraryTransform = (saved: SavedSong, kind: LibraryTransform = "another") => {
+    libraryTransformReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     setLibraryTransformTarget(saved);
     setLibraryTransformKind(kind);
     setLibraryTransformNote("");
@@ -3944,18 +4037,8 @@ export default function Home() {
     resetPerSongTools();
     if (song?.url) URL.revokeObjectURL(song.url);
     try {
-      let blob: Blob;
-      if (saved.blob) blob = saved.blob;
-      else
-        blob = await fetch(saved.remoteUrl || "").then((r) => {
-          if (!r.ok) throw new Error();
-          return r.blob();
-        });
-      let generatedLyrics = saved.generatedLyrics || "";
-      if (!generatedLyrics && saved.remoteLyricsUrl)
-        generatedLyrics = await fetch(saved.remoteLyricsUrl)
-          .then((response) => (response.ok ? response.text() : ""))
-          .catch(() => "");
+      const blob = await savedSongAudio(saved);
+      const generatedLyrics = saved.generatedLyrics || await savedSongLyrics(saved);
       setSong({
         ...saved,
         mode: saved.mode === "instrumental" && generatedLyrics.trim() ? "vocals" : saved.mode,
@@ -3967,7 +4050,7 @@ export default function Home() {
       setPlaying(false);
     } catch {
       setMessage(
-        "This cloud audio link expired. Refresh the library and try again.",
+        "Cantoa could not open this Library song right now. Its secure link was refreshed automatically when possible; please try again.",
       );
     }
   };
@@ -5650,7 +5733,7 @@ export default function Home() {
         )}
         {libraryTransformOpen && libraryTransformTarget && (
           <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !libraryTransformBusy) setLibraryTransformOpen(false); }}>
-            <section className="library-transform-modal" role="dialog" aria-modal="true" aria-labelledby="library-transform-title">
+            <section ref={libraryTransformDialogRef} tabIndex={-1} className="library-transform-modal" role="dialog" aria-modal="true" aria-labelledby="library-transform-title">
               <button className="modal-close" aria-label="Close create from song" onClick={() => !libraryTransformBusy && setLibraryTransformOpen(false)}><X /></button>
               <div className="library-transform-heading">
                 <p>CREATE FROM A SONG</p>
