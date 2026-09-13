@@ -10,6 +10,7 @@ import {
   Crown,
   Download,
   Gift,
+  GitMerge,
   Heart,
   Cake,
   GraduationCap,
@@ -54,6 +55,7 @@ type VocalMode = "vocals" | "instrumental";
 type SourceKind = "idea" | "text" | "link" | "audio";
 type CreateMode = "quick" | "advanced";
 type RevisionStrength = "subtle" | "balanced" | "bold";
+type LibraryTransform = "another" | "style" | "lyrics_music" | "rewrite" | "extend" | "section" | "instrumental" | "vocal" | "blend";
 type SmartRevisionAction = { label: string; prompt: string; versionLabel: string };
 type PronunciationEntry = { id: string; target: string; reading: string; section: string };
 type RememberedPronunciation = { id: string; target: string; reading: string; updatedAt: number };
@@ -1141,6 +1143,7 @@ export default function Home() {
   const [toastMessage, setToastMessage] = useState("");
   const [surpriseDirection, setSurpriseDirection] = useState("");
   const [revisionNote, setRevisionNote] = useState("");
+  const [preparedVersionLabel, setPreparedVersionLabel] = useState("");
   const [revisionStrength, setRevisionStrength] = useState<RevisionStrength>("balanced");
   const [emotionLock, setEmotionLock] = useState(false);
   const [momentLabOpen, setMomentLabOpen] = useState(false);
@@ -1169,6 +1172,12 @@ export default function Home() {
   const compareObjectUrls = useRef<Map<string, string>>(new Map());
   const [libraryQuery, setLibraryQuery] = useState("");
   const [libraryFilter, setLibraryFilter] = useState<"all" | "vocal" | "instrumental" | "revised">("all");
+  const [libraryTransformOpen, setLibraryTransformOpen] = useState(false);
+  const [libraryTransformTarget, setLibraryTransformTarget] = useState<SavedSong | null>(null);
+  const [libraryTransformKind, setLibraryTransformKind] = useState<LibraryTransform>("another");
+  const [libraryTransformNote, setLibraryTransformNote] = useState("");
+  const [blendSongIds, setBlendSongIds] = useState<string[]>([]);
+  const [libraryTransformBusy, setLibraryTransformBusy] = useState(false);
   const [legacyLocalCount, setLegacyLocalCount] = useState(0);
   const songAudio = useRef<HTMLAudioElement | null>(null);
   const palette = useMemo(
@@ -2246,7 +2255,7 @@ export default function Home() {
         createdAt: Date.now(),
         blob,
         parentId,
-        versionLabel: parentId ? "Revised version" : "Original",
+        versionLabel: parentId ? (preparedVersionLabel || "Revised version") : "Original",
         generatedLyrics,
         ownerId: session.user.id,
       };
@@ -2256,6 +2265,7 @@ export default function Home() {
       setView("song");
       setPlaying(false);
       setMessage("");
+      setPreparedVersionLabel("");
       try {
         await localPut(savedSong as SavedSong & { blob: Blob });
       } catch {
@@ -2291,6 +2301,7 @@ export default function Home() {
     setPreviews([]);
     setBlendDirections(false);
     setRevisionNote("");
+    setPreparedVersionLabel("");
     setView("create");
     setMessage("");
     setPlaying(false);
@@ -3091,6 +3102,7 @@ export default function Home() {
     setStarterSeedPrompt(null);
     setPrompt(`${revisionStrengthText(revisionStrength)}\n\n${emotionLock ? "Emotion Lock: preserve the original emotional identity, intimacy/energy balance and overall feeling unless the requested change explicitly requires otherwise.\n\n" : ""}Requested change: ${instruction}`);
     setTitle(`${song.title} — ${label}`);
+    setPreparedVersionLabel(label);
     setMessage(
       "Your original is preserved. This creates a new linked version using the current audio as its source.",
     );
@@ -3779,6 +3791,132 @@ export default function Home() {
     for (const url of compareObjectUrls.current.values()) URL.revokeObjectURL(url);
     compareObjectUrls.current.clear();
   }, []);
+
+  const savedSongAudio = async (saved: SavedSong) => {
+    if (saved.blob) return saved.blob;
+    if (!saved.remoteUrl) throw new Error("Audio unavailable");
+    const response = await fetch(saved.remoteUrl, { cache: "no-store" });
+    if (!response.ok) throw new Error("Audio unavailable");
+    return response.blob();
+  };
+  const savedSongLyrics = async (saved: SavedSong) => {
+    if (saved.generatedLyrics?.trim()) return saved.generatedLyrics.trim();
+    if (!saved.remoteLyricsUrl) return "";
+    return fetch(saved.remoteLyricsUrl, { cache: "no-store" })
+      .then((response) => response.ok ? response.text() : "")
+      .catch(() => "");
+  };
+  const openLibraryTransform = (saved: SavedSong, kind: LibraryTransform = "another") => {
+    setLibraryTransformTarget(saved);
+    setLibraryTransformKind(kind);
+    setLibraryTransformNote("");
+    setBlendSongIds([saved.id]);
+    setLibraryTransformOpen(true);
+    setMessage("");
+  };
+  const transformPrompt = (kind: LibraryTransform, saved: SavedSong, note: string) => {
+    const extra = note.trim() ? ` User direction: ${note.trim()}` : "";
+    const prompts: Record<Exclude<LibraryTransform, "blend">, string> = {
+      another: `Create a fresh original version inspired by “${saved.title}”. Preserve its emotional identity and strongest musical qualities, but write a new hook and make the result clearly distinct rather than a copy.${extra}`,
+      style: `Rearrange “${saved.title}” in a new style while preserving the song's recognizable emotional identity, structure and strongest musical ideas.${extra || " Choose a tasteful contrasting style that still fits the song."}`,
+      lyrics_music: `Keep the supplied lyrics intact, but create a meaningfully different arrangement, instrumentation, groove and production around them. Preserve the words; change the music.${extra}`,
+      rewrite: `Keep the musical feeling, pacing and production DNA of “${saved.title}”, but write completely fresh lyrics and a new lyrical hook. Do not copy the original words.${extra}`,
+      extend: `Create a longer, naturally developed version of “${saved.title}”. Preserve its core identity, then add meaningful musical development and a clean extended ending rather than simply looping material.${extra}`,
+      section: `Preserve the rest of “${saved.title}”, but replace the section described by the user with a newly written section that transitions naturally in and out.${extra || " Ask for the section in the main description before generating."}`,
+      instrumental: `Create an instrumental version of “${saved.title}”. Remove lead vocals while preserving the recognizable musical identity, harmony, groove and emotional arc. Let instruments carry the hook.${extra}`,
+      vocal: `Create a vocal song version inspired by “${saved.title}”. Preserve its musical identity while adding an original, singable topline and lyrics that fit the mood. Do not imitate a specific artist.${extra}`,
+    };
+    return prompts[kind as Exclude<LibraryTransform, "blend">];
+  };
+  const prepareLibraryTransform = async () => {
+    const target = libraryTransformTarget;
+    if (!target) return;
+    setLibraryTransformBusy(true);
+    setMessage("");
+    try {
+      if (libraryTransformKind === "blend") {
+        const selected = blendSongIds.map((id) => id === target.id ? target : library.find((item) => item.id === id)).filter((item): item is SavedSong => Boolean(item)).slice(0, 4);
+        if (selected.length < 2) throw new Error("Choose at least two songs to blend.");
+        const anchor = selected[0];
+        const anchorBlob = await savedSongAudio(anchor);
+        const lyricsList = await Promise.all(selected.map((item) => savedSongLyrics(item)));
+        const dna = selected.map((item, index) => {
+          const lyric = lyricsList[index]?.trim();
+          return `Song ${index + 1}: “${item.title}” · ${item.mode} · original brief: ${item.prompt}${lyric ? ` · lyric excerpt: ${lyric.slice(0, 700)}` : ""}`;
+        }).join("\n");
+        const instruction = libraryTransformNote.trim() || "Blend the strongest compatible qualities of these songs into one cohesive new original song. Use the first song as the audio anchor, but let the other selected songs influence story, mood, energy and production. Do not splice the recordings together or copy their lyrics verbatim.";
+        setDerivedContext(`Cantoa Blend Songs. Originals must remain untouched. Create a genuinely new composition rather than a stitched medley.\n${dna}`);
+        if (song?.url) URL.revokeObjectURL(song.url);
+        setPlaying(false);
+        setSong({ ...anchor, blob: anchorBlob, url: URL.createObjectURL(anchorBlob), generatedLyrics: lyricsList[0] || anchor.generatedLyrics });
+        setSourceMode(true);
+        setSourceKind("audio");
+        setSourceFile(new File([anchorBlob], `${anchor.title || "cantoa-anchor"}.${audioFileInfo(anchorBlob).extension}`, { type: audioFileInfo(anchorBlob).type }));
+        setSourceText("");
+        setSourceUrl("");
+        setVisualScoreFile(null);
+        setVideoSourceFile(null);
+        setMemoryPhotos([]);
+        sourceAutoInstrumentalRef.current = false;
+        setStarterSeedPrompt(null);
+        setPrompt(instruction);
+        setLyrics("");
+        setMode(selected.some((item) => item.mode === "vocals") ? "vocals" : "instrumental");
+        setDuration(Math.min(300, Math.max(120, anchor.duration)));
+        setTitle("");
+        setPreparedVersionLabel("Blend");
+        setView("create");
+        setCreateMode("quick");
+        setCustom(false);
+        setTurnAnythingOpen(false);
+        setActiveSourcePanel(null);
+        setLibraryTransformOpen(false);
+        setMessage(`Blend ready: ${selected.length} songs selected. The first song supplies the audio anchor; the others contribute creative DNA. Review the brief, then create a new song.`);
+        return;
+      }
+      const blob = await savedSongAudio(target);
+      const storedLyrics = await savedSongLyrics(target);
+      if (libraryTransformKind === "lyrics_music" && !storedLyrics.trim()) throw new Error("Cantoa does not have stored lyrics for this version. Open the song and add the lyrics first, or choose another transformation.");
+      const promptText = transformPrompt(libraryTransformKind, target, libraryTransformNote);
+      setDerivedContext(`Create from an existing Cantoa song. The original must remain unchanged. Use the attached song only as source material for a new version.`);
+      if (song?.url) URL.revokeObjectURL(song.url);
+      setPlaying(false);
+      setSong({ ...target, blob, url: URL.createObjectURL(blob), generatedLyrics: storedLyrics || target.generatedLyrics });
+      setSourceMode(true);
+      setSourceKind("audio");
+      const info = audioFileInfo(blob);
+      setSourceFile(new File([blob], `${target.title || "cantoa-source"}.${info.extension}`, { type: info.type }));
+      setSourceText("");
+      setSourceUrl("");
+      setVisualScoreFile(null);
+      setVideoSourceFile(null);
+      setMemoryPhotos([]);
+      sourceAutoInstrumentalRef.current = false;
+      setStarterSeedPrompt(null);
+      setPrompt(promptText);
+      setTitle("");
+      setCreateMode("quick");
+      setCustom(false);
+      setTurnAnythingOpen(false);
+      setActiveSourcePanel(null);
+      if (libraryTransformKind === "instrumental") setMode("instrumental");
+      else if (libraryTransformKind === "vocal") setMode("vocals");
+      else setMode(target.mode);
+      if (libraryTransformKind === "lyrics_music") setLyrics(storedLyrics);
+      else setLyrics("");
+      if (libraryTransformKind === "extend") setDuration(Math.min(300, Math.max(target.duration + 60, Math.round(target.duration * 1.35))));
+      else setDuration(Math.min(300, Math.max(30, target.duration)));
+      const transformLabels: Record<Exclude<LibraryTransform, "blend">, string> = { another: "Another version", style: "Restyled", lyrics_music: "New arrangement", rewrite: "New lyrics", extend: "Extended", section: "Section replaced", instrumental: "Instrumental version", vocal: "Vocal version" };
+      setPreparedVersionLabel(transformLabels[libraryTransformKind as Exclude<LibraryTransform, "blend">]);
+      setView("create");
+      setLibraryTransformOpen(false);
+      setMessage("Create-from-song setup is ready. Review or edit the brief before generating; your original stays unchanged.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Cantoa could not prepare this song transformation.");
+    } finally {
+      setLibraryTransformBusy(false);
+    }
+  };
 
   const openSaved = async (saved: SavedSong) => {
     setMessage("");
@@ -5246,6 +5384,7 @@ export default function Home() {
                         <button onClick={() => void renderSocialVideo("vertical")} disabled={!socialVideoSupported || socialVideoRendering}><Video /><span><b>{socialVideoRendering && socialVideoFormat === "vertical" ? "Finding best moment…" : "Best Moment AI"}</b><small>Find a strong 15-second Reel moment automatically.</small></span></button>
                         <button onClick={() => void createMemoryCapsule()} disabled={!!action}><Gift /><span><b>Memory Capsule</b><small>Keep the song, story, photos and finished visuals together.</small></span></button>
                         <button onClick={() => prepareDerivedMoment("dna")}><Waves /><span><b>Song DNA</b><small>Reuse this song's creative identity in something new.</small></span></button>
+                        <button onClick={() => song && openLibraryTransform({ id: song.id || crypto.randomUUID(), title: song.title, prompt: song.prompt, mode: song.mode, duration: song.duration, createdAt: song.createdAt || Date.now(), blob: song.blob, parentId: song.parentId, versionLabel: song.versionLabel, generatedLyrics: song.generatedLyrics, ownerId: session?.user.id })}><GitMerge /><span><b>Remix / transform</b><small>Change style, keep lyrics, extend, add vocals or blend with another library song.</small></span></button>
                         <button onClick={() => void createGroupCollection()}><UserCircle /><span><b>Group Song <em className="creator-badge">Creator+</em></b><small>Invite people with an unlisted link to add memories, ideas and votes.</small></span></button>
                       </div>
                     </div>
@@ -5471,6 +5610,9 @@ export default function Home() {
                         {new Date(item.createdAt).toLocaleDateString()}
                       </span>
                     </div>
+                    <button className="library-create-from" onClick={() => openLibraryTransform(item)}>
+                      <GitMerge /> Create from
+                    </button>
                     <button
                       className="icon-delete"
                       aria-label={`Delete ${item.title}`}
@@ -5483,6 +5625,57 @@ export default function Home() {
               </div>
             )}
             {message && <p className={/could not|failed|error|not supported|unavailable|sign in|used\. choose|shorten it|try again|requires|must |cannot /i.test(message) ? "error" : "app-status"}>{message}</p>}
+          </div>
+        )}
+        {libraryTransformOpen && libraryTransformTarget && (
+          <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target && !libraryTransformBusy) setLibraryTransformOpen(false); }}>
+            <section className="library-transform-modal" role="dialog" aria-modal="true" aria-labelledby="library-transform-title">
+              <button className="modal-close" aria-label="Close create from song" onClick={() => !libraryTransformBusy && setLibraryTransformOpen(false)}><X /></button>
+              <div className="library-transform-heading">
+                <p>CREATE FROM A SONG</p>
+                <h2 id="library-transform-title">Make something new from “{libraryTransformTarget.title}”</h2>
+                <span>Your original stays untouched. Choose what Cantoa should preserve or change.</span>
+              </div>
+              <div className="library-transform-grid">
+                {([
+                  ["another", "Another version", "Same emotional identity, fresh hook and arrangement."],
+                  ["style", "Change style", "Rearrange it in a different genre or production style."],
+                  ["lyrics_music", "Keep lyrics · change music", "Preserve stored lyrics while rebuilding the music."],
+                  ["rewrite", "Keep music feel · new lyrics", "Use the musical DNA but write a fresh lyrical story."],
+                  ["extend", "Extend", "Develop a longer version with a natural new section or ending."],
+                  ["section", "Replace a section", "Describe the verse, chorus, bridge or ending you want replaced."],
+                  ["instrumental", "Make instrumental", "Remove lead vocals while preserving the musical identity."],
+                  ["vocal", "Make vocal version", "Add an original vocal topline to an instrumental or remake."],
+                  ["blend", "Blend songs", "Combine creative DNA from 2–4 library songs into one new song."],
+                ] as [LibraryTransform, string, string][]).map(([kind, label, description]) => (
+                  <button type="button" key={kind} className={libraryTransformKind === kind ? "active" : ""} onClick={() => { setLibraryTransformKind(kind); setBlendSongIds((ids) => kind === "blend" ? (ids.length ? ids : [libraryTransformTarget.id]) : [libraryTransformTarget.id]); }}>
+                    <b>{label}</b><small>{description}</small>
+                  </button>
+                ))}
+              </div>
+              {libraryTransformKind === "blend" && (
+                <div className="blend-library-picker">
+                  <div><b>Select 2–4 songs</b><small>The first selected song is the audio anchor. The others contribute prompt/lyric/mood DNA; Cantoa creates a new composition rather than stitching recordings together.</small></div>
+                  <div className="blend-library-list">
+                    {[libraryTransformTarget, ...library.filter((item) => item.id !== libraryTransformTarget.id)].slice(0, 40).map((item) => {
+                      const selected = blendSongIds.includes(item.id);
+                      const lockedAnchor = item.id === libraryTransformTarget.id;
+                      return <button type="button" key={item.id} className={selected ? "active" : ""} onClick={() => setBlendSongIds((ids) => {
+                        if (lockedAnchor) return ids;
+                        if (selected) return ids.filter((id) => id !== item.id);
+                        if (ids.length >= 4) { setMessage("Blend Songs supports up to 4 songs at a time."); return ids; }
+                        return [...ids, item.id];
+                      })}><span>{selected ? <Check /> : <Plus />}</span><div><b>{item.title}</b><small>{item.mode === "vocals" ? "Vocals" : "Instrumental"} · {item.versionLabel || "Original"}</small></div>{lockedAnchor && <em>Anchor</em>}</button>;
+                    })}
+                  </div>
+                </div>
+              )}
+              <label className="library-transform-note">
+                <span>{libraryTransformKind === "blend" ? "How should Cantoa combine them?" : libraryTransformKind === "section" ? "What section should change?" : "Extra direction · optional"}</span>
+                <textarea rows={3} maxLength={800} value={libraryTransformNote} onChange={(event) => setLibraryTransformNote(event.target.value)} placeholder={libraryTransformKind === "blend" ? "e.g. Keep Song A's chorus energy, Song B's romantic storytelling and Song C's cinematic production." : libraryTransformKind === "section" ? "e.g. Replace the second verse with a more personal memory, then lift into the existing chorus." : "e.g. Warmer acoustic production, male vocal, slightly faster tempo…"} />
+              </label>
+              <div className="library-transform-actions"><button type="button" onClick={() => setLibraryTransformOpen(false)} disabled={libraryTransformBusy}>Cancel</button><button type="button" className="primary" onClick={() => void prepareLibraryTransform()} disabled={libraryTransformBusy || (libraryTransformKind === "blend" && blendSongIds.length < 2) || (libraryTransformKind === "section" && libraryTransformNote.trim().length < 4)}><Sparkles /> {libraryTransformBusy ? "Preparing…" : "Continue to Create"}</button></div>
+            </section>
           </div>
         )}
         {membershipOpen && (
