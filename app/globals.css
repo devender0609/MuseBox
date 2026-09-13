@@ -5616,3 +5616,131 @@ html, body { max-width: 100%; overflow-x: hidden; }
   .library-transform-actions { grid-template-columns: 1fr; }
   .library-transform-actions button.primary { order: -1; }
 }
+
+/* v18.8.55 — final theme-parity and interaction hardening */
+.sidebar nav .owner-nav-link.busy-disabled {
+  opacity: .46;
+  cursor: not-allowed;
+  pointer-events: auto;
+}
+
+/* Keep the most-used studio tabs and source choices unmistakable in both themes. */
+.theme-light .composer-tabs,
+.theme-light .segmented {
+  background: linear-gradient(115deg, #f3ecfb, #fbeef4) !important;
+  border-color: #d9cde3 !important;
+}
+.theme-light .composer-tabs button,
+.theme-light .segmented button {
+  color: #665b6d !important;
+}
+.theme-light .composer-tabs button.active,
+.theme-light .segmented button.active {
+  color: #221827 !important;
+  background: linear-gradient(135deg, #fff, #f8eaf3) !important;
+  border-color: color-mix(in srgb, var(--a) 46%, #d9cde3) !important;
+}
+.theme-dark .composer-tabs,
+.theme-dark .segmented {
+  background: linear-gradient(115deg, #241d2d, #2a2032) !important;
+  border-color: #493c55 !important;
+}
+.theme-dark .composer-tabs button,
+.theme-dark .segmented button {
+  color: #c9bfd1 !important;
+}
+.theme-dark .composer-tabs button.active,
+.theme-dark .segmented button.active {
+  color: #fff !important;
+  background: linear-gradient(135deg, #57324d, #473168) !important;
+  border-color: #8e6fb3 !important;
+}
+
+/* New Library remix/blend controls inherit tokens, but explicit theme rules prevent
+   low-contrast browser/color-mix combinations and make active choices obvious. */
+.theme-light .library-transform-modal {
+  background: #fffdfd !important;
+  color: #241b29 !important;
+  border-color: #ddd1e4 !important;
+}
+.theme-light .library-transform-grid > button,
+.theme-light .blend-library-list > button,
+.theme-light .library-transform-actions button:not(.primary),
+.theme-light .library-create-from {
+  background: #fff !important;
+  color: #2b2331 !important;
+  border-color: #ddd3e2 !important;
+}
+.theme-light .library-transform-grid > button small,
+.theme-light .blend-library-list > button small,
+.theme-light .library-transform-heading > span {
+  color: #695e70 !important;
+}
+.theme-light .library-transform-grid > button.active,
+.theme-light .blend-library-list > button.active {
+  background: linear-gradient(135deg, #f7edff, #fff0f6) !important;
+  color: #241b2a !important;
+  border-color: #9d7cbc !important;
+  box-shadow: 0 7px 20px rgba(81, 50, 98, .10) !important;
+}
+.theme-light .library-transform-note textarea {
+  background: #fff !important;
+  color: #241b29 !important;
+  border-color: #d9cfdf !important;
+}
+.theme-dark .library-transform-modal {
+  background: #17131e !important;
+  color: #f8f3fb !important;
+  border-color: #44384f !important;
+  box-shadow: 0 30px 90px rgba(0,0,0,.46) !important;
+}
+.theme-dark .library-transform-grid > button,
+.theme-dark .blend-library-list > button,
+.theme-dark .library-transform-actions button:not(.primary),
+.theme-dark .library-create-from {
+  background: #211a29 !important;
+  color: #f7f1fb !important;
+  border-color: #493d55 !important;
+}
+.theme-dark .library-transform-grid > button small,
+.theme-dark .blend-library-list > button small,
+.theme-dark .library-transform-heading > span {
+  color: #c4b8cb !important;
+}
+.theme-dark .library-transform-grid > button.active,
+.theme-dark .blend-library-list > button.active {
+  background: linear-gradient(135deg, #4d2d46, #3e2d5c) !important;
+  color: #fff !important;
+  border-color: #a381c4 !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,.28) !important;
+}
+.theme-dark .library-transform-note textarea {
+  background: #100d15 !important;
+  color: #f8f3fb !important;
+  border-color: #44384f !important;
+}
+.theme-dark .blend-library-list > button em { color: #d6b7ff !important; }
+.theme-light .blend-library-list > button em { color: #7652a0 !important; }
+
+/* Keep source/moment/quick-direction selection labels readable when themes change. */
+.theme-light .cantoa-source-grid > button.active,
+.theme-light .smart-create-directions button.active,
+.theme-light .story-vibe-picks button.active {
+  color: #241b2a !important;
+  border-color: #9e7fba !important;
+}
+.theme-dark .cantoa-source-grid > button.active,
+.theme-dark .smart-create-directions button.active,
+.theme-dark .story-vibe-picks button.active {
+  color: #fff !important;
+  border-color: #bd94dc !important;
+}
+
+@media (max-width: 590px) {
+  .library-transform-grid > button,
+  .blend-library-list > button,
+  .library-transform-actions button,
+  .library-create-from {
+    font-size: 14px;
+  }
+}

@@ -1180,6 +1180,9 @@ export default function Home() {
   const [libraryTransformBusy, setLibraryTransformBusy] = useState(false);
   const [legacyLocalCount, setLegacyLocalCount] = useState(0);
   const songAudio = useRef<HTMLAudioElement | null>(null);
+  // Synchronous lock closes the tiny window before React re-renders disabled controls.
+  // It prevents rapid double-clicks from launching two billable creation jobs.
+  const creationJobLockRef = useRef(false);
   const palette = useMemo(
     () => palettes[hash(prompt) % palettes.length],
     [prompt],
@@ -2012,6 +2015,10 @@ export default function Home() {
   };
 
   const generatePreviews = async () => {
+    if (creationJobLockRef.current) {
+      setMessage("A music creation is already in progress. Please wait for it to finish.");
+      return;
+    }
     if (prompt.trim().length < 8) {
       setMessage("Describe the song before creating previews.");
       return;
@@ -2055,10 +2062,12 @@ export default function Home() {
         return;
       }
     }
+    creationJobLockRef.current = true;
     setPreviewing(true);
     setMessage("");
     previews.forEach((item) => URL.revokeObjectURL(item.url));
     setPreviews([]);
+    const previewResults: Preview[] = [];
     try {
       const base = await resolveGenerationPrompt(`${derivedContext ? `${derivedContext}\n\n` : ""}${completePrompt}`);
       const directions = [
@@ -2077,7 +2086,6 @@ export default function Home() {
             "Create a concise 30-second preview with a bolder, surprising but tasteful arrangement and a clearly different musical identity.",
         },
       ];
-      const results: Preview[] = [];
       for (const item of directions) {
         const response = await fetch("/api/music", {
           method: "POST",
@@ -2099,30 +2107,40 @@ export default function Home() {
           throw new Error(data.error || "A preview could not be created.");
         }
         const blob = await response.blob();
-        results.push({
+        previewResults.push({
           ...item,
           id: crypto.randomUUID(),
           blob,
           url: URL.createObjectURL(blob),
         });
       }
-      setPreviews(results);
+      setPreviews(previewResults);
       setMessage(
         "Compare both directions, choose one, then create the complete song. These two previews use one generation minute in total.",
       );
     } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Previews could not be created.",
-      );
+      if (previewResults.length > 0) {
+        setPreviews(previewResults);
+        setMessage(`One direction preview was created, but the other could not be completed. Only successful audio was charged. You can use the available preview or try again.`);
+      } else {
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "Previews could not be created.",
+        );
+      }
     } finally {
+      creationJobLockRef.current = false;
       setPreviewing(false);
       void refreshAccount();
     }
   };
 
   const generateSong = async (override?: string) => {
+    if (creationJobLockRef.current) {
+      setMessage("A music creation is already in progress. Please wait for it to finish.");
+      return;
+    }
     const hasSourceInput = Boolean(
       (sourceKind === "link" && sourceUrl.trim()) ||
       (sourceMode && sourceFile) ||
@@ -2147,6 +2165,7 @@ export default function Home() {
       setMessage("Each free music creation can be up to 2 minutes. Shorten it to 2:00 or choose a membership for longer creations.");
       return;
     }
+    creationJobLockRef.current = true;
     setGenerating(true);
     setMessage("");
     try {
@@ -2280,6 +2299,7 @@ export default function Home() {
         ),
       );
     } finally {
+      creationJobLockRef.current = false;
       setGenerating(false);
       void refreshAccount();
     }
@@ -3842,7 +3862,8 @@ export default function Home() {
         const lyricsList = await Promise.all(selected.map((item) => savedSongLyrics(item)));
         const dna = selected.map((item, index) => {
           const lyric = lyricsList[index]?.trim();
-          return `Song ${index + 1}: “${item.title}” · ${item.mode} · original brief: ${item.prompt}${lyric ? ` · lyric excerpt: ${lyric.slice(0, 700)}` : ""}`;
+          const brief = String(item.prompt || "").slice(0, 900);
+          return `Song ${index + 1}: “${item.title}” · ${item.mode} · original brief: ${brief}${lyric ? ` · lyric excerpt: ${lyric.slice(0, 450)}` : ""}`;
         }).join("\n");
         const instruction = libraryTransformNote.trim() || "Blend the strongest compatible qualities of these songs into one cohesive new original song. Use the first song as the audio anchor, but let the other selected songs influence story, mood, energy and production. Do not splice the recordings together or copy their lyrics verbatim.";
         setDerivedContext(`Cantoa Blend Songs. Originals must remain untouched. Create a genuinely new composition rather than a stitched medley.\n${dna}`);
@@ -3862,7 +3883,7 @@ export default function Home() {
         setPrompt(instruction);
         setLyrics("");
         setMode(selected.some((item) => item.mode === "vocals") ? "vocals" : "instrumental");
-        setDuration(Math.min(300, Math.max(120, anchor.duration)));
+        setDuration(Math.min(300, Math.max(30, anchor.duration)));
         setTitle("");
         setPreparedVersionLabel("Blend");
         setView("create");
@@ -4042,7 +4063,7 @@ export default function Home() {
             <Library /> Library
           </button>
           {accountInfo?.isOwner && (
-            <a className="owner-nav-link" href="/owner">
+            <a className={`owner-nav-link ${generating || previewing ? "busy-disabled" : ""}`} href="/owner" aria-disabled={generating || previewing} tabIndex={generating || previewing ? -1 : undefined} onClick={(event) => { if (generating || previewing) { event.preventDefault(); setMessage("Finish the current music creation before leaving the studio."); } }}>
               <ShieldCheck /> Owner console
             </a>
           )}
@@ -5409,7 +5430,7 @@ export default function Home() {
                           <p>CREATE TOGETHER</p>
                           {groupCollectUrl && <button onClick={() => void useCollectedMemories()}><Download /><span><b>Build from group ideas <em className="creator-badge">Creator+</em></b><small>Use contributions and prioritize the ideas your group voted for.</small></span></button>}
                           {!groupCollectUrl && <button onClick={() => void copyGroupContributionRequest()}><Copy /><span><b>Collect by message</b><small>Copy a simple request for chat or email.</small></span></button>}
-                          <button onClick={() => void createGroupCollection()}><UserCircle /><span><b>Create another Group Song <em className="creator-badge">Creator+</em></b><small>Start an unlisted collection page for another group.</small></span></button>
+                          {groupCollectUrl && <button onClick={() => void createGroupCollection()}><UserCircle /><span><b>Create another Group Song <em className="creator-badge">Creator+</em></b><small>Start an unlisted collection page for another group.</small></span></button>}
                         </section>
                       </div>
                     </details>
