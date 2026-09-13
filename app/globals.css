@@ -5886,3 +5886,39 @@ html[data-theme="dark"] textarea::placeholder {
   .smart-remix-chips{display:grid;grid-template-columns:1fr 1fr}
   .smart-remix-chips button{justify-content:flex-start;width:100%}
 }
+
+
+/* v18.9.1 — theme-token completion and dark/light parity hardening.
+   Older feature blocks use --accent and --card. Define them from the canonical
+   palette/surface tokens so controls never fall back to invalid or white defaults. */
+.theme-light,
+.theme-dark {
+  --accent: var(--a);
+  --card: var(--surface);
+}
+
+/* Keep collaboration/status surfaces readable even when legacy card styles are reused. */
+.theme-dark .group-link-row {
+  background: linear-gradient(135deg,#241c2d,#1b1622) !important;
+  border: 1px solid #4b3e58;
+  color: #fbf8ff !important;
+}
+.theme-dark .group-link-row b { color:#fff !important; }
+.theme-dark .group-link-row small { color:#c9bfd1 !important; opacity:1 !important; }
+.theme-light .group-link-row {
+  background: linear-gradient(135deg,color-mix(in srgb,var(--a) 7%,var(--surface)),var(--surface-2));
+  border: 1px solid color-mix(in srgb,var(--a) 20%,var(--border));
+  color: var(--text);
+}
+
+/* Social destinations must inherit a readable foreground, including SVG icons. */
+.theme-dark .share-panel.social .social-grid button,
+.theme-dark .share-panel.social .social-grid button svg {
+  color:#fbf8ff !important;
+}
+.theme-light .share-panel.social .social-grid button,
+.theme-light .share-panel.social .social-grid button svg {
+  color:#2b2331 !important;
+}
+.theme-dark .share-panel.social .social-grid .whatsapp { color:#54e2a0 !important; }
+.theme-light .share-panel.social .social-grid .whatsapp { color:#087a4a !important; }
