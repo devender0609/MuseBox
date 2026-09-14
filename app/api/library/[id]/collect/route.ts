@@ -22,9 +22,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const { data: song, error: songError } = await admin.from("songs").select("id,title").eq("id", id).eq("user_id", user.id).maybeSingle();
   if (songError) return NextResponse.json({ error: "The cloud library could not verify this song right now." }, { status: 503 });
   if (!song) return NextResponse.json({ error: "Song not found in your cloud library." }, { status: 404 });
-  const { data: existing, error: existingError } = await admin.from("moment_collections").select("token").eq("song_id", id).eq("owner_id", user.id).maybeSingle();
+  const { data: existing, error: existingError } = await admin.from("moment_collections").select("id,token,open").eq("song_id", id).eq("owner_id", user.id).maybeSingle();
   if (existingError && /moment_collections/i.test(existingError.message)) return NextResponse.json({ error: "Run the latest Supabase setup before using Group Song." }, { status: 503 });
-  if (existing?.token) return NextResponse.json({ url: `${request.nextUrl.origin}/contribute/${existing.token}`, reused: true });
+  if (existing?.token && existing.open !== false) return NextResponse.json({ url: `${request.nextUrl.origin}/contribute/${existing.token}`, reused: true });
+  if (existing?.id) {
+    const token = crypto.randomUUID().replaceAll("-", "");
+    const { error: reopenError } = await admin.from("moment_collections").update({ open: true, token }).eq("id", existing.id).eq("owner_id", user.id);
+    if (reopenError) return NextResponse.json({ error: "We could not reopen your Group Song right now." }, { status: 500 });
+    return NextResponse.json({ url: `${request.nextUrl.origin}/contribute/${token}`, reused: false });
+  }
   const token = crypto.randomUUID().replaceAll("-", "");
   const { error: insertError } = await admin.from("moment_collections").insert({ song_id: id, owner_id: user.id, token });
   if (insertError) {
@@ -46,7 +52,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (access === null) return NextResponse.json({ error: "Group Song membership access could not be verified right now." }, { status: 503 });
   if (!access) return NextResponse.json({ error: "Group Song requires Creator or Studio." }, { status: 402 });
   const { id } = await params;
-  const { data: collection, error } = await admin.from("moment_collections").select("id,token").eq("song_id", id).eq("owner_id", user.id).maybeSingle();
+  const { data: collection, error } = await admin.from("moment_collections").select("id,token,open").eq("song_id", id).eq("owner_id", user.id).maybeSingle();
   if (error) return NextResponse.json({ error: "Run the latest Supabase setup before using Group Song." }, { status: 503 });
   if (!collection) return NextResponse.json({ contributions: [], url: "" });
   let { data, error: itemsError } = await admin.from("moment_contributions").select("id,contributor,kind,memory,feeling,photo_path,created_at").eq("collection_id", collection.id).order("created_at", { ascending: true }).limit(100);
@@ -66,5 +72,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     for (const vote of votes || []) voteCounts.set(vote.contribution_id, (voteCounts.get(vote.contribution_id) || 0) + 1);
   }
   const contributions = (data || []).map((item) => ({ ...item, votes: voteCounts.get(item.id) || 0, hasPhoto: Boolean(item.photo_path) }));
-  return NextResponse.json({ contributions, url: `${request.nextUrl.origin}/contribute/${collection.token}` });
+  return NextResponse.json({ contributions, url: collection.open === false ? "" : `${request.nextUrl.origin}/contribute/${collection.token}` });
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const user = await authenticatedUser(request); const admin = adminSupabase();
+  if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
+  if (!admin) return NextResponse.json({ error: "Cloud collaboration is not configured." }, { status: 503 });
+  const { id } = await params;
+  const nextToken = crypto.randomUUID().replaceAll("-", "");
+  const { error } = await admin.from("moment_collections").update({ open: false, token: nextToken }).eq("song_id", id).eq("owner_id", user.id);
+  return error ? NextResponse.json({ error: "Group Song could not be closed right now." }, { status: 500 }) : NextResponse.json({ ok: true });
 }

@@ -1,3 +1,7 @@
+# Cantoa v18.9.2
+
+Current hardening release. See `RELEASE_NOTES_v18.9.2.md`. Before using reusable My Voice, run `supabase-v18.9.2-hardening.sql` (or the full `supabase-setup.sql`) in Supabase.
+
 ## v18.8.45
 Website → song reliability: bounded webpage context and direct-generation fallback when optional lyric/structure planning fails. No SQL or new env vars.
 

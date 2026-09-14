@@ -2616,6 +2616,41 @@ export default function Home() {
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not schedule the Secret Drop."); }
   };
 
+  const cancelSecretDrop = async () => {
+    if (!song?.id || !session) return;
+    try {
+      const response = await fetch(`/api/library/${song.id}/drop`, { method: "DELETE", headers: { Authorization: `Bearer ${session.access_token}` } });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not cancel the Secret Drop.");
+      setSecretDropAt("");
+      notify("Secret Drop cancelled.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not cancel the Secret Drop."); }
+  };
+
+  const closeGroupCollection = async () => {
+    if (!song?.id || !session || !groupCollectUrl) return;
+    if (!confirm("Close this Group Song link? The current unlisted URL will stop accepting contributions.")) return;
+    try {
+      const response = await fetch(`/api/library/${song.id}/collect`, { method: "DELETE", headers: { Authorization: `Bearer ${session.access_token}` } });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not close the Group Song.");
+      setGroupCollectUrl("");
+      notify("Group Song link closed. The previous URL is no longer active.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not close the Group Song."); }
+  };
+
+  const disableGiftLink = async () => {
+    if (!song?.id || !session || !publicShareUrl) return;
+    if (!confirm("Disable this gift link? Anyone using the current URL will lose access.")) return;
+    try {
+      const response = await fetch(`/api/library/${song.id}/share`, { method: "DELETE", headers: { Authorization: `Bearer ${session.access_token}` } });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Could not disable the gift link.");
+      setPublicShareUrl("");
+      notify("Gift link disabled. A future share will use a new private URL.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Could not disable the gift link."); }
+  };
+
   const exportSongPassport = () => {
     if (!song || !currentSongDNA) return;
     const passport = [
@@ -5545,7 +5580,7 @@ export default function Home() {
                         {myVoiceLimit > 0 && <small className="my-voice-limit">{selectedPlan === "Studio" ? "Studio" : accountInfo?.isOwner ? "Owner" : "Creator"}: {myVoiceProfiles.length} of {myVoiceLimit} reusable voice profile{myVoiceLimit === 1 ? "" : "s"} used.</small>}
                       </section>
                     )}
-                    <div className="secret-drop-row"><div><Gift /><span><b>Secret Song Drop</b><small>Schedule the gift page to stay locked until a future date and time.</small></span></div><input type="datetime-local" value={secretDropAt} min={new Date(Date.now()+120000).toISOString().slice(0,16)} onChange={(e)=>setSecretDropAt(e.target.value)} /><button onClick={() => void scheduleSecretDrop()} disabled={!secretDropAt}>Schedule drop</button></div>
+                    <div className="secret-drop-row"><div><Gift /><span><b>Secret Song Drop</b><small>Schedule the gift page to stay locked until a future date and time.</small></span></div><input type="datetime-local" value={secretDropAt} min={new Date(Date.now()+120000).toISOString().slice(0,16)} onChange={(e)=>setSecretDropAt(e.target.value)} /><button onClick={() => void scheduleSecretDrop()} disabled={!secretDropAt}>Schedule drop</button><button type="button" onClick={() => void cancelSecretDrop()}>Cancel drop</button></div>
                     {groupCollectUrl && <section className="group-share-card" aria-label="Group Song sharing page">
                       <div className="group-share-card-head">
                         <div className="group-share-icon"><UserCircle /></div>
@@ -5553,7 +5588,7 @@ export default function Home() {
                       </div>
                       <div className="group-share-actions">
                         <button className="group-share-primary" onClick={() => void navigator.clipboard?.writeText(groupCollectUrl).then(()=>notify("Unlisted Group Song link copied.")).catch(()=>setMessage("Could not copy the group link."))}><Copy /> Copy unlisted link</button>
-                        <button onClick={() => window.open(groupCollectUrl,"_blank","noopener,noreferrer")}><ExternalLink /> Open group page</button>
+                        <button onClick={() => window.open(groupCollectUrl,"_blank","noopener,noreferrer")}><ExternalLink /> Open group page</button><button type="button" onClick={() => void closeGroupCollection()}><X /> Close group link</button>
                       </div>
                       <div className="group-share-url"><span>{groupCollectUrl}</span><button aria-label="Copy Group Song link" onClick={() => void navigator.clipboard?.writeText(groupCollectUrl).then(()=>notify("Unlisted Group Song link copied.")).catch(()=>setMessage("Could not copy the group link."))}><Copy /></button></div>
                       <div className="group-share-steps" aria-label="How Group Song works">
@@ -5598,6 +5633,7 @@ export default function Home() {
                       {(inferMomentIdFromBrief(song.prompt) === "business" || resultIntentPlan.jinglePack) && <button className="finish-jingle" onClick={() => void createJinglePack()} disabled={jinglePackBuilding || !song}><Building2 /> {jinglePackBuilding ? "Creating jingle pack…" : "15/30/60 jingle pack"}</button>}
                       {publicShareUrl && <button className="finish-copy" onClick={() => {void navigator.clipboard?.writeText(publicShareUrl).then(() => notify("Share link copied")).catch(() => setMessage("Could not copy the share link in this browser."));}}><Copy /> Copy gift link</button>}
                       {publicShareUrl && <button className="finish-open" onClick={() => window.open(publicShareUrl,"_blank","noopener,noreferrer")}><ExternalLink /> Open gift page</button>}
+                      {publicShareUrl && <button className="finish-open" onClick={() => void disableGiftLink()}><X /> Disable gift link</button>}
                     </div>
                   </details>
                   {socialVideoUrl && (

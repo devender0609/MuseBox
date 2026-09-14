@@ -44,6 +44,6 @@ export async function DELETE(
   if (!user) return NextResponse.json({ error: "Sign in required." }, { status: 401 });
   if (!admin) return NextResponse.json({ error: "Cloud sharing is not configured." }, { status: 503 });
   const { id } = await params;
-  const { error } = await admin.from("songs").update({ public_share: false }).eq("id", id).eq("user_id", user.id);
+  const { error } = await admin.from("songs").update({ public_share: false, share_token: null }).eq("id", id).eq("user_id", user.id);
   return error ? NextResponse.json({ error: error.message }, { status: 500 }) : NextResponse.json({ ok: true });
 }

@@ -29,6 +29,9 @@ export async function logGenerationEvent(request: Request, event: GenerationEven
     if (!admin) return;
     const user = await authenticatedUser(request);
     const estimate = estimateProviderCost(event.provider, event.requestedSeconds, event.requestType);
+    // Privacy hardening: diagnostics are operational, not a permanent creative-history store.
+    // Best-effort rolling retention keeps detailed generation rows for 30 days.
+    await admin.from("generation_events").delete().lt("created_at", new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
     await admin.from("generation_events").insert({
       user_id: user?.id || null,
       user_email: user?.email || null,

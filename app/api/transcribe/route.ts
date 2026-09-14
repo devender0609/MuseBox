@@ -1,5 +1,6 @@
 import {NextRequest,NextResponse} from "next/server";
 import {enforceRateLimit,ensureGenerationAccess,usageError} from "@/lib/usage";
+import {isSupportedAudioFile} from "@/lib/audio-upload";
 
 export const maxDuration=60;
 
@@ -11,6 +12,7 @@ export async function POST(request:NextRequest){
     const incoming=await request.formData();
     const file=incoming.get("file");
     if(!(file instanceof File)||file.size===0)return NextResponse.json({error:"No voice recording was received."},{status:400});
+    if(!isSupportedAudioFile(file))return NextResponse.json({error:"Use a supported voice recording (MP3, WAV, M4A, AAC, FLAC, OGG, MP4 audio, or WebM)."},{status:415});
     if(file.size>15*1024*1024)return NextResponse.json({error:"Keep voice descriptions under two minutes."},{status:413});
     const form=new FormData();
     form.append("file",file,file.name||"song-idea.webm");

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { enforceRateLimit, ensurePremiumAccess, usageError } from "@/lib/usage";
+import { isSupportedAudioFile } from "@/lib/audio-upload";
 
 export const maxDuration = 300;
 export async function POST(request: NextRequest) {
@@ -24,6 +25,7 @@ export async function POST(request: NextRequest) {
     if (!key) return NextResponse.json({ error: "Connect ELEVENLABS_API_KEY to export stems." }, { status: 503 });
     const file = incoming!.get("file");
     if (!(file instanceof File) || file.size === 0) return NextResponse.json({ error: "An audio file is required." }, { status: 400 });
+    if (!isSupportedAudioFile(file)) return NextResponse.json({ error: "Use a supported audio file (MP3, WAV, M4A, AAC, FLAC, OGG, MP4 audio, or WebM)." }, { status: 415 });
     if (file.size > 50 * 1024 * 1024) return NextResponse.json({ error: "Keep stem-source audio under 50 MB." }, { status: 413 });
     const variationRaw = incoming!.get("variation");
     const variation = variationRaw === "two_stems_v1" ? "two_stems_v1" : "six_stems_v1";

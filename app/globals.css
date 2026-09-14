@@ -5922,3 +5922,8 @@ html[data-theme="dark"] textarea::placeholder {
 }
 .theme-dark .share-panel.social .social-grid .whatsapp { color:#54e2a0 !important; }
 .theme-light .share-panel.social .social-grid .whatsapp { color:#087a4a !important; }
+
+/* v18.9.2 hardening: minimum readable helper text and consistent destructive-control contrast. */
+.my-voice-panel small,.group-share-card small,.secret-drop-row small,.finish-share-panel small{font-size:max(.72rem,11px);line-height:1.35}
+.group-share-card button,.secret-drop-row button,.finish-share-panel button{min-height:36px}
+[data-theme="dark"] .group-share-card button,[data-theme="dark"] .secret-drop-row button,[data-theme="dark"] .finish-share-panel button{color:var(--text);border-color:var(--border)}
