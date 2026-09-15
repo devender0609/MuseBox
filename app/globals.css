@@ -5927,3 +5927,47 @@ html[data-theme="dark"] textarea::placeholder {
 .my-voice-panel small,.group-share-card small,.secret-drop-row small,.finish-share-panel small{font-size:max(.72rem,11px);line-height:1.35}
 .group-share-card button,.secret-drop-row button,.finish-share-panel button{min-height:36px}
 [data-theme="dark"] .group-share-card button,[data-theme="dark"] .secret-drop-row button,[data-theme="dark"] .finish-share-panel button{color:var(--text);border-color:var(--border)}
+
+/* v18.9.3 maintenance — targeted readability/accessibility polish only.
+   Keep compact UI hierarchy while avoiding sub-10px instructional text in the
+   advanced language, reusable-voice and owner-console surfaces flagged by QA. */
+.section-language-grid > small,
+.pronunciation-editor-heading span,
+.pronunciation-editor > small,
+.provider-language-note,
+.advanced-language-panel > summary small,
+.my-voice-panel small,
+.my-voice-source > span,
+.my-voice-consent span,
+.my-voice-clip > small,
+.my-voice-list small,
+.my-voice-list button,
+.my-voice-limit,
+.my-voice-purpose small,
+.my-voice-original-note,
+.my-voice-guide,
+.my-voice-guide b,
+.my-voice-guide small,
+.my-voice-reusable > summary small {
+  font-size: 11px !important;
+  line-height: 1.4;
+}
+.my-voice-source > button,
+.my-voice-upload,
+.my-voice-create-button,
+.my-voice-purpose button,
+.my-voice-profile-picker button,
+.my-voice-actions button {
+  font-size: 11px;
+  min-height: 36px;
+}
+.owner-status,
+.owner-traffic-grid article > div span,
+.owner-log-filters label,
+.owner-provider-grid dl div small {
+  font-size: 10px;
+}
+@media (max-width: 680px) {
+  .pronunciation-entry { grid-template-columns: 1fr; }
+  .pronunciation-entry > button { min-height: 36px; }
+}

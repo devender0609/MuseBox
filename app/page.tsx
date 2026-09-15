@@ -5113,7 +5113,9 @@ export default function Home() {
                         ? "Create remix"
                         : "Create complete song"}{" "}
                     <span>
-                      {quality === "release" ? "STRUCTURED HQ" : "CREATIVE"}
+                      {createMode === "advanced"
+                        ? quality === "release" ? "STRUCTURED HQ" : "CREATIVE"
+                        : "QUICK CREATE"}
                     </span>
                   </>
                 )}
