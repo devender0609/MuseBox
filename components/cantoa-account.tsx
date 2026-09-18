@@ -22,6 +22,7 @@ export type CantoaAccountInfo = {
   minutesRemaining: number | null;
   currentPeriodEnd?: string | number | null;
   isOwner: boolean;
+  hasStripeMembership?: boolean;
   freeSongClaimed?: boolean;
   freeSongsRemaining?: number;
   billingCurrency?: string | null;
@@ -274,7 +275,10 @@ export default function CantoaAccount({
                 <small className="account-usage-note">Creating new AI audio uses music-generation minutes. Reels, square videos, lyric videos, gift pages, and re-exports from an existing finished song do not.</small>
               </div>
             )}
-            {account && !account.isOwner && (account.plan === "Creator" || account.plan === "Studio") && (
+            {account && (
+              ((!account.isOwner && (account.plan === "Creator" || account.plan === "Studio")) ||
+                (account.isOwner && account.hasStripeMembership))
+            ) && (
               <button
                 type="button"
                 className="account-manage-membership"

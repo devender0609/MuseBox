@@ -8,14 +8,28 @@ export async function GET(request: NextRequest) {
   const admin = adminSupabase();
   if (!user)
     return NextResponse.json({ error: "Sign in required." }, { status: 401, headers: noStore });
-  if (isCantoaOwner(user.email))
+  if (isCantoaOwner(user.email)) {
+    let hasStripeMembership = false;
+
+    if (admin) {
+      const { data: ownerMembership } = await admin
+        .from("memberships")
+        .select("stripe_customer_id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      hasStripeMembership = Boolean(ownerMembership?.stripe_customer_id);
+    }
+
     return NextResponse.json({
       plan: "Owner",
       status: "active",
       minutesRemaining: null,
       isOwner: true,
+      hasStripeMembership,
       cloudConfigured: Boolean(admin),
     }, { headers: noStore });
+  }
   if (!admin)
     return NextResponse.json({
       plan: "Explore",
