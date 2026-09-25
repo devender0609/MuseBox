@@ -189,7 +189,12 @@ export default function CantoaAccount({
     setMessage("");
     const { error } = await client.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin },
+      options: {
+        redirectTo: window.location.origin,
+        queryParams: {
+          prompt: "select_account",
+        },
+      },
     });
     if (error) {
       setBusy(false);
@@ -446,3 +451,4 @@ export default function CantoaAccount({
     </div>
   );
 }
+
