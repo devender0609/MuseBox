@@ -32,7 +32,7 @@ export default function PurchaseConversionTag({
           });
 
           gtag('event', 'conversion', {
-            send_to: 'AW-18430730512/C-_jCMW-vO4cEJDCutRE',
+            send_to: 'AW-18430730512/RVu0CKDgqYUdEJDCutRE',
             value: ${value},
             currency: ${JSON.stringify(currency)},
             transaction_id: ${JSON.stringify(transactionId)}
